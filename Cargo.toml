@@ -1,0 +1,36 @@
+[package]
+name = "xxh3"
+description = "XXH3 hash function"
+homepage = "https://github.com/cberner/xxh3"
+repository = "https://github.com/cberner/xxh3"
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.59"
+authors = ["Christopher Berner <christopherberner@gmail.com>"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+pyo3 = {version = "0.16", features=["extension-module", "abi3-py37"], optional = true }
+
+[dev-dependencies]
+rand = "0.8"
+
+[features]
+python = ["pyo3"]
+
+[profile.bench]
+debug = true
+
+[package.metadata.maturin]
+requires-python = ">= 3.7"
+classifier = ["Development Status :: 4 - Beta",
+    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Rust"]
