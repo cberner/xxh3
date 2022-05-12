@@ -1,0 +1,27 @@
+[package]
+name = "xxh3-fuzz"
+version = "0.0.0"
+authors = ["Automatically generated"]
+publish = false
+edition = "2018"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+arbitrary = { version = "1.1.0", features = ["derive"] }
+libfuzzer-sys = { version = "0.4.0", features = ["arbitrary-derive"] }
+xxhash_reference = { path = "../xxhash_reference" }
+
+[dependencies.xxh3]
+path = ".."
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "fuzz_xxh3"
+path = "fuzz_targets/fuzz_xxh3.rs"
+test = false
+doc = false

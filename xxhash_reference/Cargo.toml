@@ -3,6 +3,7 @@ name = "xxhash_reference"
 license = "MIT OR Apache-2.0"
 version = "0.0.0"
 edition = "2021"
+publish = false
 authors = ["Christopher Berner <christopherberner@gmail.com>"]
 
 [dependencies]
