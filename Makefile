@@ -7,6 +7,9 @@ pre:
 	cargo fmt --all -- --check
 	cargo clippy --all --all-targets
 
+bench: pre
+	cargo bench
+
 publish_py: test_py
 	docker pull quay.io/pypa/manylinux2014_x86_64
 	docker run -it --rm -v $(shell pwd):/xxh3 quay.io/pypa/manylinux2014_x86_64 /xxh3/py_publish.sh
