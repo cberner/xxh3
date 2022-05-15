@@ -6,7 +6,11 @@ struct XXHashU128 {
 
 extern "C" {
     fn XXH3_64bits_withSeed(input: *const libc::c_void, length: libc::size_t, seed: u64) -> u64;
-    fn XXH3_128bits_withSeed(input: *const libc::c_void, length: libc::size_t, seed: u64) -> XXHashU128;
+    fn XXH3_128bits_withSeed(
+        input: *const libc::c_void,
+        length: libc::size_t,
+        seed: u64,
+    ) -> XXHashU128;
 }
 
 pub fn xxh3_64(data: &[u8], seed: u64) -> u64 {
@@ -14,16 +18,15 @@ pub fn xxh3_64(data: &[u8], seed: u64) -> u64 {
 }
 
 pub fn xxh3_128(data: &[u8], seed: u64) -> u128 {
-    let hash = unsafe {
-        XXH3_128bits_withSeed(data.as_ptr() as *const libc::c_void, data.len(), seed)
-    };
+    let hash =
+        unsafe { XXH3_128bits_withSeed(data.as_ptr() as *const libc::c_void, data.len(), seed) };
 
     ((hash.high64 as u128) << 64) | hash.low64 as u128
 }
 
 #[cfg(test)]
 mod test {
-    use crate::{xxh3_64, xxh3_128};
+    use crate::{xxh3_128, xxh3_64};
 
     #[test]
     fn hash() {
