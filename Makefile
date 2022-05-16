@@ -9,6 +9,7 @@ pre:
 
 bench: pre
 	cargo bench
+	firefox ./target/criterion/report/index.html
 
 publish_py: test_py
 	docker pull quay.io/pypa/manylinux2014_x86_64
