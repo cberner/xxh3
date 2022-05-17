@@ -118,6 +118,38 @@ fn merge_accumulators(
     xxh3_avalanche(result)
 }
 
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2")]
+unsafe fn scramble_accumulators_avx2(
+    accumulators: &mut [u64; INIT_ACCUMULATORS.len()],
+    secret: &[u8],
+) {
+    #[cfg(target_arch = "x86")]
+    use std::arch::x86::*;
+    #[cfg(target_arch = "x86_64")]
+    use std::arch::x86_64::*;
+
+    let simd_prime = _mm256_set1_epi32(PRIME32[0] as i32);
+    let secret_ptr = secret.as_ptr();
+    let accumulators_ptr = accumulators.as_mut_ptr();
+
+    for i in 0..(STRIPE_LENGTH / 32) {
+        let a = _mm256_loadu_si256((accumulators_ptr as *const __m256i).add(i));
+        let shifted = _mm256_srli_epi64::<47>(a);
+        let b = _mm256_xor_si256(a, shifted);
+
+        let s = _mm256_loadu_si256((secret_ptr as *const __m256i).add(i));
+        let c = _mm256_xor_si256(b, s);
+        let c_high = _mm256_shuffle_epi32::<49>(c);
+
+        let low = _mm256_mul_epu32(c, simd_prime);
+        let high = _mm256_mul_epu32(c_high, simd_prime);
+        let high = _mm256_slli_epi64::<32>(high);
+        let result = _mm256_add_epi64(low, high);
+        _mm256_storeu_si256((accumulators_ptr as *mut __m256i).add(i), result);
+    }
+}
+
 fn scramble_accumulators_generic(accumulators: &mut [u64; INIT_ACCUMULATORS.len()], secret: &[u8]) {
     for (i, x) in accumulators.iter_mut().enumerate() {
         let s = get_u64(secret, i);
@@ -128,6 +160,14 @@ fn scramble_accumulators_generic(accumulators: &mut [u64; INIT_ACCUMULATORS.len(
 }
 
 fn scramble_accumulators(accumulators: &mut [u64; INIT_ACCUMULATORS.len()], secret: &[u8]) {
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    {
+        if is_x86_feature_detected!("avx2") {
+            unsafe {
+                return scramble_accumulators_avx2(accumulators, secret);
+            }
+        }
+    }
     scramble_accumulators_generic(accumulators, secret)
 }
 
