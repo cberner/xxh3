@@ -180,9 +180,44 @@ fn gen_secret_generic(seed: u64) -> [u8; DEFAULT_SECRET.len()] {
     secret
 }
 
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2")]
+unsafe fn gen_secret_avx2(seed: u64) -> [u8; DEFAULT_SECRET.len()] {
+    #[cfg(target_arch = "x86")]
+    use std::arch::x86::*;
+    #[cfg(target_arch = "x86_64")]
+    use std::arch::x86_64::*;
+
+    let simd_seed = _mm256_set_epi64x(
+        0u64.wrapping_sub(seed) as i64,
+        seed as i64,
+        0u64.wrapping_sub(seed) as i64,
+        seed as i64,
+    );
+
+    let mut output = [0u8; DEFAULT_SECRET.len()];
+    let output_ptr = output.as_mut_ptr();
+    let secret_ptr = DEFAULT_SECRET.as_ptr();
+    for i in 0..6 {
+        let s = _mm256_loadu_si256((secret_ptr as *const __m256i).add(i));
+        let x = _mm256_add_epi64(s, simd_seed);
+        _mm256_storeu_si256((output_ptr as *mut __m256i).add(i), x);
+    }
+
+    output
+}
+
 fn gen_secret(seed: u64) -> [u8; DEFAULT_SECRET.len()] {
     if seed == 0 {
         return DEFAULT_SECRET;
+    }
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    {
+        if is_x86_feature_detected!("avx2") {
+            unsafe {
+                return gen_secret_avx2(seed);
+            }
+        }
     }
     gen_secret_generic(seed)
 }
