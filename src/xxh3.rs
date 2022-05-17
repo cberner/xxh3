@@ -222,6 +222,37 @@ fn gen_secret(seed: u64) -> [u8; DEFAULT_SECRET.len()] {
     gen_secret_generic(seed)
 }
 
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2")]
+unsafe fn accumulate_stripe_avx2(accumulators: &mut [u64; 8], data: &[u8], secret: &[u8]) {
+    #[cfg(target_arch = "x86")]
+    use std::arch::x86::*;
+    #[cfg(target_arch = "x86_64")]
+    use std::arch::x86_64::*;
+
+    let data_ptr = data.as_ptr();
+    let secret_ptr = secret.as_ptr();
+    let accumulator_ptr = accumulators.as_mut_ptr();
+
+    assert!(data.len() >= STRIPE_LENGTH);
+    assert!(secret.len() >= STRIPE_LENGTH);
+    for i in 0..(STRIPE_LENGTH / 32) {
+        let x = _mm256_loadu_si256((data_ptr as *const __m256i).add(i));
+        let s = _mm256_loadu_si256((secret_ptr as *const __m256i).add(i));
+
+        let z = _mm256_xor_si256(x, s);
+        let z_low = _mm256_shuffle_epi32::<49>(z);
+
+        let product = _mm256_mul_epu32(z, z_low);
+        let shuffled = _mm256_shuffle_epi32::<78>(x);
+
+        let result = _mm256_loadu_si256((accumulator_ptr as *const __m256i).add(i));
+        let result = _mm256_add_epi64(result, shuffled);
+        let result = _mm256_add_epi64(result, product);
+        _mm256_storeu_si256((accumulator_ptr as *mut __m256i).add(i), result);
+    }
+}
+
 fn accumulate_stripe_generic(accumulators: &mut [u64; 8], data: &[u8], secret: &[u8]) {
     for i in 0..accumulators.len() {
         let x = get_u64(&data[i * 8..], 0);
@@ -233,6 +264,14 @@ fn accumulate_stripe_generic(accumulators: &mut [u64; 8], data: &[u8], secret: &
 }
 
 fn accumulate_stripe(accumulators: &mut [u64; 8], data: &[u8], secret: &[u8]) {
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    {
+        if is_x86_feature_detected!("avx2") {
+            unsafe {
+                return accumulate_stripe_avx2(accumulators, data, secret);
+            }
+        }
+    }
     accumulate_stripe_generic(accumulators, data, secret)
 }
 
