@@ -150,6 +150,41 @@ unsafe fn scramble_accumulators_avx2(
     }
 }
 
+#[cfg(target_arch = "aarch64")]
+unsafe fn scramble_accumulators_neon(
+    accumulators: &mut [u64; INIT_ACCUMULATORS.len()],
+    secret: &[u8],
+) {
+    #[cfg(target_arch = "aarch64")]
+    use std::arch::aarch64::*;
+    #[cfg(target_arch = "arm")]
+    use std::arch::arm::*;
+
+    let prime = vdup_n_u32(PRIME32[0] as u32);
+
+    let accum_ptr = accumulators.as_mut_ptr();
+    let secret_ptr = secret.as_ptr();
+    assert!(secret.len() >= STRIPE_LENGTH);
+    for i in 0..(STRIPE_LENGTH / 16) {
+        // xorshift
+        let accum = vld1q_u64(accum_ptr.add(i * 2));
+        let shifted = vshrq_n_u64(accum, 47);
+        let accum = veorq_u64(accum, shifted);
+
+        // xor with secret
+        let s = vld1q_u8(secret_ptr.add(i * 16));
+        let accum = veorq_u64(accum, vreinterpretq_u64_u8(s));
+
+        // mul with prime. Sadly there's no vmulq_u64
+        let accum_low = vmovn_u64(accum);
+        let accum_high = vshrn_n_u64(accum, 32);
+        let prod_high = vshlq_n_u64(vmull_u32(accum_high, prime), 32);
+        let accum = vmlal_u32(prod_high, accum_low, prime);
+        vst1q_u64(accum_ptr.add(i * 2), accum);
+    }
+}
+
+#[cfg(not(target_arch = "aarch64"))]
 fn scramble_accumulators_generic(accumulators: &mut [u64; INIT_ACCUMULATORS.len()], secret: &[u8]) {
     for (i, x) in accumulators.iter_mut().enumerate() {
         let s = get_u64(secret, i);
@@ -168,6 +203,13 @@ fn scramble_accumulators(accumulators: &mut [u64; INIT_ACCUMULATORS.len()], secr
             }
         }
     }
+    #[cfg(target_arch = "aarch64")]
+    {
+        unsafe {
+            return scramble_accumulators_neon(accumulators, secret);
+        }
+    }
+    #[cfg(not(target_arch = "aarch64"))]
     scramble_accumulators_generic(accumulators, secret)
 }
 
@@ -262,6 +304,36 @@ fn gen_secret(seed: u64) -> [u8; DEFAULT_SECRET.len()] {
     gen_secret_generic(seed)
 }
 
+#[cfg(target_arch = "aarch64")]
+unsafe fn accumulate_stripe_neon(accumulators: &mut [u64; 8], data: &[u8], secret: &[u8]) {
+    #[cfg(target_arch = "aarch64")]
+    use std::arch::aarch64::*;
+    #[cfg(target_arch = "arm")]
+    use std::arch::arm::*;
+
+    let accum_ptr = accumulators.as_mut_ptr();
+    let data_ptr = data.as_ptr();
+    let secret_ptr = secret.as_ptr();
+    assert!(data.len() >= STRIPE_LENGTH);
+    assert!(secret.len() >= STRIPE_LENGTH);
+    for i in 0..(STRIPE_LENGTH / 16) {
+        let x = vld1q_u8(data_ptr.add(i * 16));
+        let s = vld1q_u8(secret_ptr.add(i * 16));
+        let x64 = vreinterpretq_u64_u8(x);
+        let y = vextq_u64(x64, x64, 1);
+
+        let result = vld1q_u64(accum_ptr.add(i * 2));
+        let result = vaddq_u64(result, y);
+
+        let z = vreinterpretq_u64_u8(veorq_u8(x, s));
+        let z_low = vmovn_u64(z);
+        let z_high = vshrn_n_u64(z, 32);
+
+        let result = vmlal_u32(result, z_low, z_high);
+        vst1q_u64(accum_ptr.add(i * 2), result);
+    }
+}
+
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "avx2")]
 unsafe fn accumulate_stripe_avx2(accumulators: &mut [u64; 8], data: &[u8], secret: &[u8]) {
@@ -293,6 +365,7 @@ unsafe fn accumulate_stripe_avx2(accumulators: &mut [u64; 8], data: &[u8], secre
     }
 }
 
+#[cfg(not(target_arch = "aarch64"))]
 fn accumulate_stripe_generic(accumulators: &mut [u64; 8], data: &[u8], secret: &[u8]) {
     for i in 0..accumulators.len() {
         let x = get_u64(&data[i * 8..], 0);
@@ -312,6 +385,13 @@ fn accumulate_stripe(accumulators: &mut [u64; 8], data: &[u8], secret: &[u8]) {
             }
         }
     }
+    #[cfg(target_arch = "aarch64")]
+    {
+        unsafe {
+            return accumulate_stripe_neon(accumulators, data, secret);
+        }
+    }
+    #[cfg(not(target_arch = "aarch64"))]
     accumulate_stripe_generic(accumulators, data, secret)
 }
 

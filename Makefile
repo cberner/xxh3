@@ -25,7 +25,7 @@ test: pre
 	RUST_BACKTRACE=1 cargo test
 
 # Nightly version selected from: https://rust-lang.github.io/rustup-components-history/
-NIGHTLY := "nightly-2022-03-21"
+NIGHTLY := "nightly-2022-05-17"
 fuzz: pre
 	rustup toolchain install $(NIGHTLY)
 	cargo +$(NIGHTLY) fuzz run fuzz_xxh3 -- -max_len=1000000
