@@ -58,7 +58,15 @@ pub fn hash64_with_seed(data: &[u8], seed: u64) -> u64 {
     if data.len() <= 240 {
         hash64_0to240(data, &DEFAULT_SECRET, seed)
     } else {
-        hash64_large(data, seed)
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        {
+            if is_x86_feature_detected!("avx2") {
+                unsafe {
+                    return hash64_large_avx2(data, seed);
+                }
+            }
+        }
+        hash64_large_generic(data, seed)
     }
 }
 
@@ -102,6 +110,7 @@ fn xxh3_avalanche(mut x: u64) -> u64 {
     x
 }
 
+#[inline(always)]
 fn merge_accumulators(
     accumulators: [u64; INIT_ACCUMULATORS.len()],
     secret: &[u8],
@@ -194,6 +203,7 @@ fn scramble_accumulators_generic(accumulators: &mut [u64; INIT_ACCUMULATORS.len(
     }
 }
 
+#[inline(always)]
 fn scramble_accumulators(accumulators: &mut [u64; INIT_ACCUMULATORS.len()], secret: &[u8]) {
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     {
@@ -289,6 +299,7 @@ unsafe fn gen_secret_avx2(seed: u64) -> [u8; DEFAULT_SECRET.len()] {
     output
 }
 
+#[inline(always)]
 fn gen_secret(seed: u64) -> [u8; DEFAULT_SECRET.len()] {
     if seed == 0 {
         return DEFAULT_SECRET;
@@ -376,6 +387,7 @@ fn accumulate_stripe_generic(accumulators: &mut [u64; 8], data: &[u8], secret: &
     }
 }
 
+#[inline(always)]
 fn accumulate_stripe(accumulators: &mut [u64; 8], data: &[u8], secret: &[u8]) {
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     {
@@ -395,6 +407,7 @@ fn accumulate_stripe(accumulators: &mut [u64; 8], data: &[u8], secret: &[u8]) {
     accumulate_stripe_generic(accumulators, data, secret)
 }
 
+#[inline(always)]
 fn accumulate_block(accumulators: &mut [u64; 8], data: &[u8], secret: &[u8], stripes: usize) {
     for i in 0..stripes {
         accumulate_stripe(
@@ -405,6 +418,7 @@ fn accumulate_block(accumulators: &mut [u64; 8], data: &[u8], secret: &[u8], str
     }
 }
 
+#[inline(always)]
 fn hash_large_helper(data: &[u8], secret: &[u8]) -> [u64; INIT_ACCUMULATORS.len()] {
     let mut accumulators = INIT_ACCUMULATORS;
 
@@ -538,7 +552,14 @@ fn hash64_0to240(data: &[u8], secret: &[u8], seed: u64) -> u64 {
     }
 }
 
-fn hash64_large(data: &[u8], seed: u64) -> u64 {
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2")]
+unsafe fn hash64_large_avx2(data: &[u8], seed: u64) -> u64 {
+    hash64_large_generic(data, seed)
+}
+
+#[inline(always)]
+fn hash64_large_generic(data: &[u8], seed: u64) -> u64 {
     let secret = gen_secret(seed);
     let accumulators = hash_large_helper(data, &secret);
 
