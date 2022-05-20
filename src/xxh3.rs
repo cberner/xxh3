@@ -66,7 +66,20 @@ pub fn hash64_with_seed(data: &[u8], seed: u64) -> u64 {
                 }
             }
         }
-        hash64_large_generic(data, seed)
+        #[cfg(target_arch = "aarch64")]
+        {
+            unsafe {
+                return hash64_large_neon(data, seed);
+            }
+        }
+        #[cfg(not(target_arch = "aarch64"))]
+        hash64_large_generic(
+            data,
+            seed,
+            gen_secret_generic,
+            scramble_accumulators_generic,
+            accumulate_stripe_generic,
+        )
     }
 }
 
@@ -74,7 +87,28 @@ pub fn hash128_with_seed(data: &[u8], seed: u64) -> u128 {
     if data.len() <= 240 {
         hash128_0to240(data, &DEFAULT_SECRET, seed)
     } else {
-        hash128_large(data, seed)
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        {
+            if is_x86_feature_detected!("avx2") {
+                unsafe {
+                    return hash128_large_avx2(data, seed);
+                }
+            }
+        }
+        #[cfg(target_arch = "aarch64")]
+        {
+            unsafe {
+                return hash128_large_neon(data, seed);
+            }
+        }
+        #[cfg(not(target_arch = "aarch64"))]
+        hash128_large_generic(
+            data,
+            seed,
+            gen_secret_generic,
+            scramble_accumulators_generic,
+            accumulate_stripe_generic,
+        )
     }
 }
 
@@ -203,26 +237,6 @@ fn scramble_accumulators_generic(accumulators: &mut [u64; INIT_ACCUMULATORS.len(
     }
 }
 
-#[inline(always)]
-fn scramble_accumulators(accumulators: &mut [u64; INIT_ACCUMULATORS.len()], secret: &[u8]) {
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-    {
-        if is_x86_feature_detected!("avx2") {
-            unsafe {
-                return scramble_accumulators_avx2(accumulators, secret);
-            }
-        }
-    }
-    #[cfg(target_arch = "aarch64")]
-    {
-        unsafe {
-            return scramble_accumulators_neon(accumulators, secret);
-        }
-    }
-    #[cfg(not(target_arch = "aarch64"))]
-    scramble_accumulators_generic(accumulators, secret)
-}
-
 fn xorshift(x: u64, shift: u64) -> u64 {
     x ^ (x >> shift)
 }
@@ -299,22 +313,6 @@ unsafe fn gen_secret_avx2(seed: u64) -> [u8; DEFAULT_SECRET.len()] {
     output
 }
 
-#[inline(always)]
-fn gen_secret(seed: u64) -> [u8; DEFAULT_SECRET.len()] {
-    if seed == 0 {
-        return DEFAULT_SECRET;
-    }
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-    {
-        if is_x86_feature_detected!("avx2") {
-            unsafe {
-                return gen_secret_avx2(seed);
-            }
-        }
-    }
-    gen_secret_generic(seed)
-}
-
 #[cfg(target_arch = "aarch64")]
 unsafe fn accumulate_stripe_neon(accumulators: &mut [u64; 8], data: &[u8], secret: &[u8]) {
     #[cfg(target_arch = "aarch64")]
@@ -388,38 +386,31 @@ fn accumulate_stripe_generic(accumulators: &mut [u64; 8], data: &[u8], secret: &
 }
 
 #[inline(always)]
-fn accumulate_stripe(accumulators: &mut [u64; 8], data: &[u8], secret: &[u8]) {
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-    {
-        if is_x86_feature_detected!("avx2") {
-            unsafe {
-                return accumulate_stripe_avx2(accumulators, data, secret);
-            }
-        }
-    }
-    #[cfg(target_arch = "aarch64")]
-    {
-        unsafe {
-            return accumulate_stripe_neon(accumulators, data, secret);
-        }
-    }
-    #[cfg(not(target_arch = "aarch64"))]
-    accumulate_stripe_generic(accumulators, data, secret)
-}
-
-#[inline(always)]
-fn accumulate_block(accumulators: &mut [u64; 8], data: &[u8], secret: &[u8], stripes: usize) {
+fn accumulate_block(
+    accumulators: &mut [u64; 8],
+    data: &[u8],
+    secret: &[u8],
+    stripes: usize,
+    accum_stripe: unsafe fn(&mut [u64; 8], &[u8], &[u8]),
+) {
     for i in 0..stripes {
-        accumulate_stripe(
-            accumulators,
-            &data[i * STRIPE_LENGTH..],
-            &secret[i * SECRET_CONSUME_RATE..],
-        );
+        unsafe {
+            accum_stripe(
+                accumulators,
+                &data[i * STRIPE_LENGTH..],
+                &secret[i * SECRET_CONSUME_RATE..],
+            );
+        }
     }
 }
 
 #[inline(always)]
-fn hash_large_helper(data: &[u8], secret: &[u8]) -> [u64; INIT_ACCUMULATORS.len()] {
+fn hash_large_helper(
+    data: &[u8],
+    secret: &[u8],
+    scramble: unsafe fn(&mut [u64; 8], &[u8]),
+    accum_stripe: unsafe fn(&mut [u64; 8], &[u8], &[u8]),
+) -> [u64; INIT_ACCUMULATORS.len()] {
     let mut accumulators = INIT_ACCUMULATORS;
 
     let stripes_per_block = (secret.len() - STRIPE_LENGTH) / SECRET_CONSUME_RATE;
@@ -433,8 +424,9 @@ fn hash_large_helper(data: &[u8], secret: &[u8]) -> [u64; INIT_ACCUMULATORS.len(
             &data[i * block_len..],
             secret,
             stripes_per_block,
+            accum_stripe,
         );
-        scramble_accumulators(&mut accumulators, &secret[secret.len() - STRIPE_LENGTH..]);
+        unsafe { scramble(&mut accumulators, &secret[secret.len() - STRIPE_LENGTH..]) };
     }
 
     // trailing partial block
@@ -444,14 +436,17 @@ fn hash_large_helper(data: &[u8], secret: &[u8]) -> [u64; INIT_ACCUMULATORS.len(
         &data[blocks * block_len..],
         secret,
         stripes,
+        accum_stripe,
     );
 
     // trailing stripe
-    accumulate_stripe(
-        &mut accumulators,
-        &data[data.len() - STRIPE_LENGTH..],
-        &secret[secret.len() - STRIPE_LENGTH - 7..],
-    );
+    unsafe {
+        accum_stripe(
+            &mut accumulators,
+            &data[data.len() - STRIPE_LENGTH..],
+            &secret[secret.len() - STRIPE_LENGTH - 7..],
+        );
+    }
 
     accumulators
 }
@@ -552,16 +547,39 @@ fn hash64_0to240(data: &[u8], secret: &[u8], seed: u64) -> u64 {
     }
 }
 
+#[cfg(target_arch = "aarch64")]
+unsafe fn hash64_large_neon(data: &[u8], seed: u64) -> u64 {
+    hash64_large_generic(
+        data,
+        seed,
+        gen_secret_generic,
+        scramble_accumulators_neon,
+        accumulate_stripe_neon,
+    )
+}
+
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "avx2")]
 unsafe fn hash64_large_avx2(data: &[u8], seed: u64) -> u64 {
-    hash64_large_generic(data, seed)
+    hash64_large_generic(
+        data,
+        seed,
+        gen_secret_avx2,
+        scramble_accumulators_avx2,
+        accumulate_stripe_avx2,
+    )
 }
 
 #[inline(always)]
-fn hash64_large_generic(data: &[u8], seed: u64) -> u64 {
-    let secret = gen_secret(seed);
-    let accumulators = hash_large_helper(data, &secret);
+fn hash64_large_generic(
+    data: &[u8],
+    seed: u64,
+    gen: unsafe fn(u64) -> [u8; DEFAULT_SECRET.len()],
+    scramble: unsafe fn(&mut [u64; 8], &[u8]),
+    accum_stripe: unsafe fn(&mut [u64; 8], &[u8], &[u8]),
+) -> u64 {
+    let secret = unsafe { gen(seed) };
+    let accumulators = hash_large_helper(data, &secret, scramble, accum_stripe);
 
     merge_accumulators(
         accumulators,
@@ -729,9 +747,39 @@ fn hash128_0to240(data: &[u8], secret: &[u8], seed: u64) -> u128 {
     }
 }
 
-fn hash128_large(data: &[u8], seed: u64) -> u128 {
-    let secret = gen_secret(seed);
-    let accumulators = hash_large_helper(data, &secret);
+#[cfg(target_arch = "aarch64")]
+unsafe fn hash128_large_neon(data: &[u8], seed: u64) -> u128 {
+    hash128_large_generic(
+        data,
+        seed,
+        gen_secret_generic,
+        scramble_accumulators_neon,
+        accumulate_stripe_neon,
+    )
+}
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2")]
+unsafe fn hash128_large_avx2(data: &[u8], seed: u64) -> u128 {
+    hash128_large_generic(
+        data,
+        seed,
+        gen_secret_avx2,
+        scramble_accumulators_avx2,
+        accumulate_stripe_avx2,
+    )
+}
+
+#[inline(always)]
+fn hash128_large_generic(
+    data: &[u8],
+    seed: u64,
+    gen: unsafe fn(u64) -> [u8; DEFAULT_SECRET.len()],
+    scramble: unsafe fn(&mut [u64; 8], &[u8]),
+    accum_stripe: unsafe fn(&mut [u64; 8], &[u8], &[u8]),
+) -> u128 {
+    let secret = unsafe { gen(seed) };
+    let accumulators = hash_large_helper(data, &secret, scramble, accum_stripe);
 
     let low = merge_accumulators(
         accumulators,
