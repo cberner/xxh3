@@ -172,7 +172,7 @@ unsafe fn scramble_accumulators_avx2(
     #[cfg(target_arch = "x86_64")]
     use std::arch::x86_64::*;
 
-    let simd_prime = _mm256_set1_epi32(PRIME32[0] as i32);
+    let simd_prime = _mm256_set1_epi32(PRIME32[0].try_into().unwrap());
     let secret_ptr = secret.as_ptr();
     let accumulators_ptr = accumulators.as_mut_ptr();
 
@@ -295,10 +295,10 @@ unsafe fn gen_secret_avx2(seed: u64) -> [u8; DEFAULT_SECRET.len()] {
     use std::arch::x86_64::*;
 
     let simd_seed = _mm256_set_epi64x(
-        0u64.wrapping_sub(seed) as i64,
-        seed as i64,
-        0u64.wrapping_sub(seed) as i64,
-        seed as i64,
+        0u64.wrapping_sub(seed).try_into().unwrap(),
+        seed.try_into().unwrap(),
+        0u64.wrapping_sub(seed).try_into().unwrap(),
+        seed.try_into().unwrap(),
     );
 
     let mut output = [0u8; DEFAULT_SECRET.len()];
