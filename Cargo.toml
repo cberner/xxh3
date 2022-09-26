@@ -14,10 +14,10 @@ authors = ["Christopher Berner <christopherberner@gmail.com>"]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-pyo3 = {version = "0.16", features=["extension-module", "abi3-py37"], optional = true }
+pyo3 = {version = "0.17.1", features=["extension-module", "abi3-py37"], optional = true }
 
 [dev-dependencies]
-criterion = { version = "0.3.5", features=["html_reports"] }
+criterion = { version = "0.4.0", features=["html_reports"] }
 rand = "0.8"
 xxhash_reference = { path = "./xxhash_reference" }
 
