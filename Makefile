@@ -29,10 +29,14 @@ test: pre
 	RUST_BACKTRACE=1 cargo test
 
 # Nightly version selected from: https://rust-lang.github.io/rustup-components-history/
-NIGHTLY := "nightly-2022-05-17"
+NIGHTLY := "nightly-2022-09-10"
 fuzz: pre
 	rustup toolchain install $(NIGHTLY)
 	cargo +$(NIGHTLY) fuzz run fuzz_xxh3 -- -max_len=1000000
+
+fuzz_ci: pre
+	rustup toolchain install $(NIGHTLY)
+	cargo +$(NIGHTLY) fuzz run fuzz_xxh3 -- -max_len=1000000 -max_total_time=60
 
 RUST_SYSROOT := $(shell cargo +$(NIGHTLY) rustc -- --print sysroot 2>/dev/null)
 LLVM_COV := $(shell find $(RUST_SYSROOT) -name llvm-cov)
