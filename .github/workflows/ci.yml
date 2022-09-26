@@ -46,7 +46,7 @@ jobs:
       - name: Install packages
         if: startsWith(matrix.os, 'macos')
         run: |
-          brew install python3
+          brew install python3 openssl
 
       - name: Install packages
         uses: actions/setup-python@v4
