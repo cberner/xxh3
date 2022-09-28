@@ -20,6 +20,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+#![allow(clippy::cast_possible_truncation)]
+
 use std::mem::size_of;
 
 const STRIPE_LENGTH: usize = 64;
@@ -251,7 +253,7 @@ fn rrmxmx(mut x: u64, y: u64) -> u64 {
 
 fn mul128_and_xor(x: u64, y: u64) -> u64 {
     let z = u128::try_from(x).unwrap() * u128::try_from(y).unwrap();
-    u64::try_from(z).unwrap() ^ u64::try_from(z >> 64).unwrap()
+    z as u64 ^ (z >> 64) as u64
 }
 
 fn mix16(data: &[u8], secret: &[u8], seed: u64) -> u64 {
@@ -624,7 +626,7 @@ fn hash128_4to8(data: &[u8], secret: &[u8], mut seed: u64) -> u128 {
     let mut y = (x ^ s) as u128;
     y = y.wrapping_mul(PRIME64[0].wrapping_add((data.len() << 2) as u64) as u128);
 
-    let mut r_low: u64 = y.try_into().unwrap();
+    let mut r_low = y as u64;
     let mut r_high: u64 = (y >> 64).try_into().unwrap();
     r_high = r_high.wrapping_add(r_low << 1);
     r_low ^= r_high >> 3;
@@ -645,7 +647,7 @@ fn hash128_9to16(data: &[u8], secret: &[u8], seed: u64) -> u128 {
     let x_high = x_high ^ s_high;
 
     let result = (mixed as u128).wrapping_mul(PRIME64[0] as u128);
-    let mut r_low: u64 = result.try_into().unwrap();
+    let mut r_low = result as u64;
     let mut r_high = (result >> 64) as u64;
     r_low = r_low.wrapping_add((data.len() as u64 - 1) << 54);
     r_high = r_high.wrapping_add(x_high);
@@ -653,7 +655,7 @@ fn hash128_9to16(data: &[u8], secret: &[u8], seed: u64) -> u128 {
     r_low ^= r_high.swap_bytes();
 
     let result2 = (r_low as u128).wrapping_mul(PRIME64[1] as u128);
-    let mut r2_low: u64 = result2.try_into().unwrap();
+    let mut r2_low = result2 as u64;
     let mut r2_high = (result2 >> 64) as u64;
     r2_high = r2_high.wrapping_add(r_high.wrapping_mul(PRIME64[1]));
     r2_low = xxh3_avalanche(r2_low);
