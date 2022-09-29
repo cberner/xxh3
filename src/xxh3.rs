@@ -20,8 +20,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#![allow(clippy::cast_possible_truncation)]
-
 use std::mem::size_of;
 
 const STRIPE_LENGTH: usize = 64;
@@ -90,18 +88,14 @@ pub fn hash128_with_seed(data: &[u8], seed: u64) -> u128 {
         hash128_0to240(data, &DEFAULT_SECRET, seed)
     } else {
         #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-        {
-            if is_x86_feature_detected!("avx2") {
-                unsafe {
-                    return hash128_large_avx2(data, seed);
-                }
+        if is_x86_feature_detected!("avx2") {
+            unsafe {
+                return hash128_large_avx2(data, seed);
             }
         }
         #[cfg(target_arch = "aarch64")]
-        {
-            unsafe {
-                return hash128_large_neon(data, seed);
-            }
+        unsafe {
+            return hash128_large_neon(data, seed);
         }
         #[cfg(not(target_arch = "aarch64"))]
         hash128_large_generic(
@@ -253,7 +247,8 @@ fn rrmxmx(mut x: u64, y: u64) -> u64 {
 
 fn mul128_and_xor(x: u64, y: u64) -> u64 {
     let z = u128::try_from(x).unwrap() * u128::try_from(y).unwrap();
-    z as u64 ^ (z >> 64) as u64
+    #[allow(clippy::cast_possible_truncation)]
+    (z as u64 ^ (z >> 64) as u64)
 }
 
 fn mix16(data: &[u8], secret: &[u8], seed: u64) -> u64 {
@@ -626,6 +621,7 @@ fn hash128_4to8(data: &[u8], secret: &[u8], mut seed: u64) -> u128 {
     let mut y = (x ^ s) as u128;
     y = y.wrapping_mul(PRIME64[0].wrapping_add((data.len() << 2) as u64) as u128);
 
+    #[allow(clippy::cast_possible_truncation)]
     let mut r_low = y as u64;
     let mut r_high: u64 = (y >> 64).try_into().unwrap();
     r_high = r_high.wrapping_add(r_low << 1);
@@ -647,6 +643,7 @@ fn hash128_9to16(data: &[u8], secret: &[u8], seed: u64) -> u128 {
     let x_high = x_high ^ s_high;
 
     let result = (mixed as u128).wrapping_mul(PRIME64[0] as u128);
+    #[allow(clippy::cast_possible_truncation)]
     let mut r_low = result as u64;
     let mut r_high = (result >> 64) as u64;
     r_low = r_low.wrapping_add((data.len() as u64 - 1) << 54);
@@ -655,6 +652,7 @@ fn hash128_9to16(data: &[u8], secret: &[u8], seed: u64) -> u128 {
     r_low ^= r_high.swap_bytes();
 
     let result2 = (r_low as u128).wrapping_mul(PRIME64[1] as u128);
+    #[allow(clippy::cast_possible_truncation)]
     let mut r2_low = result2 as u64;
     let mut r2_high = (result2 >> 64) as u64;
     r2_high = r2_high.wrapping_add(r_high.wrapping_mul(PRIME64[1]));
