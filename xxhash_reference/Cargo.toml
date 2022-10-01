@@ -11,3 +11,4 @@ libc = "0.2.125"
 
 [build-dependencies]
 cc = "1.0.73"
+cfg-if = "1"
