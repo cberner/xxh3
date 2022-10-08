@@ -604,11 +604,7 @@ fn hash128_1to3(data: &[u8], secret: &[u8], seed: u64) -> u128 {
     let x4 = data.len() as u32;
 
     let combined_low = (x1 << 16) | (x2 << 24) | x3 | (x4 << 8);
-    let combined_high: u64 = combined_low
-        .swap_bytes()
-        .rotate_left(13)
-        .try_into()
-        .unwrap();
+    let combined_high: u64 = combined_low.swap_bytes().rotate_left(13).into();
     let s_low = ((get_u32(secret, 0) ^ get_u32(secret, 1)) as u64).wrapping_add(seed);
     let s_high = ((get_u32(secret, 2) ^ get_u32(secret, 3)) as u64).wrapping_sub(seed);
     let high = (xxh64_avalanche(combined_high ^ s_high) as u128) << 64;
