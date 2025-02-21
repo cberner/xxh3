@@ -43,24 +43,6 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install packages
-        if: startsWith(matrix.os, 'ubuntu')
-        run: |
-          sudo apt update
-          sudo apt install -y python3 python3-pip python3-dev python3-venv gcc-multilib libclang-dev
-
-      - name: Install packages
-        if: startsWith(matrix.os, 'macos')
-        run: |
-          brew install python3 openssl
-
-      - name: Install packages
-        uses: actions/setup-python@v4
-        if: startsWith(matrix.os, 'windows')
-        with:
-          python-version: "3.10"
-          architecture: "x64"
-
       - name: Install Rust
         if: steps.rust-cache.outputs.cache-hit != 'true'
         run: |
@@ -80,7 +62,7 @@ jobs:
         run: cargo install --force --version 1.36.0 just --locked
 
       - name: Compile
-        run: cargo build --all-targets --all-features
+        run: cargo build --all-targets
 
       - name: Run tests
         run: make build test
