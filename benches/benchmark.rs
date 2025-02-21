@@ -6,7 +6,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     for len in [0, 3, 8, 16, 128, 240, 512, 1024, 4096, 65536, 1048576] {
         let mut data = vec![0u8; len];
         for x in data.iter_mut() {
-            *x = rand::thread_rng().gen();
+            *x = rand::rng().random();
         }
         group.bench_with_input(BenchmarkId::new("crate", len), &len, |b, _| {
             b.iter(|| xxh3::hash64_with_seed(black_box(&data), black_box(1)))
@@ -20,7 +20,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     for len in [0, 3, 8, 16, 128, 240, 512, 1024, 4096, 65536, 1048576] {
         let mut data = vec![0u8; len];
         for x in data.iter_mut() {
-            *x = rand::thread_rng().gen();
+            *x = rand::rng().random();
         }
         group.bench_with_input(BenchmarkId::new("crate", len), &len, |b, _| {
             b.iter(|| xxh3::hash128_with_seed(black_box(&data), black_box(1)))
