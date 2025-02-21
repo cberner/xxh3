@@ -6,7 +6,7 @@ repository = "https://github.com/cberner/xxh3"
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 version = "0.1.1"
-edition = "2021"
+edition = "2024"
 rust-version = "1.85"
 authors = ["Christopher Berner <christopherberner@gmail.com>"]
 
