@@ -31,7 +31,7 @@ jobs:
                 ~/.cargo/registry/cache/
                 ~/.cargo/git/db/
                 target/
-            key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.toml') }}-cargo-deny-0-12-2-cargo-fuzz-0-11-0
+            key: ${{ runner.os }}-rust163-cargo-${{ hashFiles('**/Cargo.toml') }}-cargo-deny-0-12-2-cargo-fuzz-0-11-0
 
       - name: Check for forbidden words
         run: "! grep --include='*.rs' -RE 'dbg!' ."
@@ -57,7 +57,7 @@ jobs:
 
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: 1.63
           components: rustfmt, clippy
 
       - name: Install cargo-deny
