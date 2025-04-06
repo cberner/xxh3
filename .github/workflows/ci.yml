@@ -65,11 +65,11 @@ jobs:
         run: cargo build --all-targets
 
       - name: Run tests
-        run: make build test
+        run: just build test
 
       - name: Run fuzzer
-        run: make fuzz_ci
-        if: runner.os != 'Windows'
+        run: just fuzz_ci
+        if: startsWith(matrix.os, 'ubuntu')
 
       - name: Clippy
         run: cargo clippy --all --all-targets -- -Dwarnings
@@ -84,7 +84,7 @@ jobs:
           source venv/bin/activate
           pip3 install --upgrade pip
           pip3 install maturin
-          make test_py
+          just test_py
 
       - name: Run CPython wrapper tests
         if: runner.os == 'Windows'
@@ -93,4 +93,4 @@ jobs:
           venv\Scripts\activate
           pip3 install --upgrade pip
           pip3 install maturin
-          make test_py
+          just test_py
