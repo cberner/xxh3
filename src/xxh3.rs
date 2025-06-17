@@ -60,6 +60,14 @@ pub fn hash64_with_seed(data: &[u8], seed: u64) -> u64 {
     } else {
         #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
         {
+            if is_x86_feature_detected!("avx512f") {
+                unsafe {
+                    return hash64_large_avx512(data, seed);
+                }
+            }
+        }
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        {
             if is_x86_feature_detected!("avx2") {
                 unsafe {
                     return hash64_large_avx2(data, seed);
@@ -85,6 +93,12 @@ pub fn hash128_with_seed(data: &[u8], seed: u64) -> u128 {
     if data.len() <= 240 {
         hash128_0to240(data, &DEFAULT_SECRET, seed)
     } else {
+        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+        if is_x86_feature_detected!("avx512f") {
+            unsafe {
+                return hash128_large_avx512(data, seed);
+            }
+        }
         #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
         if is_x86_feature_detected!("avx2") {
             unsafe {
@@ -187,6 +201,39 @@ unsafe fn scramble_accumulators_avx2(
             let result = _mm256_add_epi64(low, high);
             _mm256_storeu_si256((accumulators_ptr as *mut __m256i).add(i), result);
         }
+    }
+}
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[target_feature(enable = "avx512f")]
+unsafe fn scramble_accumulators_avx512(
+    accumulators: &mut [u64; INIT_ACCUMULATORS.len()],
+    secret: &[u8],
+) {
+    unsafe {
+        #[cfg(target_arch = "x86")]
+        use std::arch::x86::*;
+        #[cfg(target_arch = "x86_64")]
+        use std::arch::x86_64::*;
+
+        #[allow(clippy::cast_possible_truncation)]
+        let simd_prime = _mm512_set1_epi32(PRIME32[0] as i32);
+        let secret_ptr = secret.as_ptr();
+        let accumulators_ptr = accumulators.as_mut_ptr();
+
+        let a = _mm512_loadu_si512(accumulators_ptr as *const __m512i);
+        let shifted = _mm512_srli_epi64::<47>(a);
+        let b = _mm512_xor_si512(a, shifted);
+
+        let s = _mm512_loadu_si512(secret_ptr as *const __m512i);
+        let c = _mm512_xor_si512(b, s);
+        let c_high = _mm512_shuffle_epi32::<49>(c);
+
+        let low = _mm512_mul_epu32(c, simd_prime);
+        let high = _mm512_mul_epu32(c_high, simd_prime);
+        let high = _mm512_slli_epi64::<32>(high);
+        let result = _mm512_add_epi64(low, high);
+        _mm512_storeu_si512(accumulators_ptr as *mut __m512i, result);
     }
 }
 
@@ -316,6 +363,37 @@ unsafe fn gen_secret_avx2(seed: u64) -> [u8; DEFAULT_SECRET.len()] {
     }
 }
 
+#[allow(clippy::cast_possible_truncation)]
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[target_feature(enable = "avx512f")]
+unsafe fn gen_secret_avx512(seed: u64) -> [u8; DEFAULT_SECRET.len()] {
+    unsafe {
+        #[cfg(target_arch = "x86")]
+        use std::arch::x86::*;
+        #[cfg(target_arch = "x86_64")]
+        use std::arch::x86_64::*;
+
+        #[allow(clippy::cast_possible_wrap)]
+        let xxh_i64 = 0u64.wrapping_sub(seed) as i64;
+        #[allow(clippy::cast_possible_wrap)]
+        let seed = seed as i64;
+
+        let simd_seed =
+            _mm512_set_epi64(xxh_i64, seed, xxh_i64, seed, xxh_i64, seed, xxh_i64, seed);
+
+        let mut output = [0u8; DEFAULT_SECRET.len()];
+        let output_ptr = output.as_mut_ptr();
+        let secret_ptr = DEFAULT_SECRET.as_ptr();
+        for i in 0..3 {
+            let s = _mm512_loadu_si512((secret_ptr as *const __m512i).add(i));
+            let x = _mm512_add_epi64(s, simd_seed);
+            _mm512_storeu_si512((output_ptr as *mut __m512i).add(i), x);
+        }
+
+        output
+    }
+}
+
 #[cfg(target_arch = "aarch64")]
 unsafe fn accumulate_stripe_neon(accumulators: &mut [u64; 8], data: &[u8], secret: &[u8]) {
     #[cfg(target_arch = "aarch64")]
@@ -378,6 +456,37 @@ unsafe fn accumulate_stripe_avx2(accumulators: &mut [u64; 8], data: &[u8], secre
             let result = _mm256_add_epi64(result, product);
             _mm256_storeu_si256((accumulator_ptr as *mut __m256i).add(i), result);
         }
+    }
+}
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[target_feature(enable = "avx512f")]
+unsafe fn accumulate_stripe_avx512(accumulators: &mut [u64; 8], data: &[u8], secret: &[u8]) {
+    unsafe {
+        #[cfg(target_arch = "x86")]
+        use std::arch::x86::*;
+        #[cfg(target_arch = "x86_64")]
+        use std::arch::x86_64::*;
+
+        let data_ptr = data.as_ptr();
+        let secret_ptr = secret.as_ptr();
+        let accumulator_ptr = accumulators.as_mut_ptr();
+
+        assert!(data.len() >= STRIPE_LENGTH);
+        assert!(secret.len() >= STRIPE_LENGTH);
+        let x = _mm512_loadu_si512(data_ptr as *const __m512i);
+        let s = _mm512_loadu_si512(secret_ptr as *const __m512i);
+
+        let z = _mm512_xor_si512(x, s);
+        let z_low = _mm512_shuffle_epi32::<49>(z);
+
+        let product = _mm512_mul_epu32(z, z_low);
+        let shuffled = _mm512_shuffle_epi32::<78>(x);
+
+        let result = _mm512_loadu_si512(accumulator_ptr as *const __m512i);
+        let result = _mm512_add_epi64(result, shuffled);
+        let result = _mm512_add_epi64(result, product);
+        _mm512_storeu_si512(accumulator_ptr as *mut __m512i, result);
     }
 }
 
@@ -577,6 +686,18 @@ unsafe fn hash64_large_avx2(data: &[u8], seed: u64) -> u64 {
         gen_secret_avx2,
         scramble_accumulators_avx2,
         accumulate_stripe_avx2,
+    )
+}
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[target_feature(enable = "avx512f")]
+unsafe fn hash64_large_avx512(data: &[u8], seed: u64) -> u64 {
+    hash64_large_generic(
+        data,
+        seed,
+        gen_secret_avx512,
+        scramble_accumulators_avx512,
+        accumulate_stripe_avx512,
     )
 }
 
@@ -783,6 +904,18 @@ unsafe fn hash128_large_avx2(data: &[u8], seed: u64) -> u128 {
         gen_secret_avx2,
         scramble_accumulators_avx2,
         accumulate_stripe_avx2,
+    )
+}
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[target_feature(enable = "avx512f")]
+unsafe fn hash128_large_avx512(data: &[u8], seed: u64) -> u128 {
+    hash128_large_generic(
+        data,
+        seed,
+        gen_secret_avx512,
+        scramble_accumulators_avx512,
+        accumulate_stripe_avx512,
     )
 }
 
