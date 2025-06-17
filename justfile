@@ -9,7 +9,7 @@ pre:
 
 bench: pre
     cargo bench
-    firefox ./target/criterion/report/index.html
+    #firefox ./target/criterion/report/index.html
 
 flamegraph:
     cargo flamegraph --bench benchmark -- --bench
