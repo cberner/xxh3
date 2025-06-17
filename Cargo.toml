@@ -1,28 +1,32 @@
 [package]
 name = "xxh3"
 description = "XXH3 hash function"
-homepage = "https://github.com/cberner/xxh3"
-repository = "https://github.com/cberner/xxh3"
 readme = "README.md"
-license = "MIT OR Apache-2.0"
 version = "0.1.1"
+exclude = ["fuzz/", "xxhash_reference/"]
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[workspace]
+members = [".", "crates/xxh3-python"]
+default-members = [".", "crates/xxh3-python"]
+
+[workspace.package]
 edition = "2024"
 rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/cberner/xxh3"
+repository = "https://github.com/cberner/xxh3"
 authors = ["Christopher Berner <me@cberner.com>"]
-
-[lib]
-crate-type = ["cdylib", "rlib"]
-
-[dependencies]
-pyo3 = {version = "0.23.4", features=["extension-module", "abi3-py37"], optional = true }
 
 [dev-dependencies]
 criterion = { version = "0.4.0", features=["html_reports"] }
 rand = "0.9"
 xxhash_reference = { path = "./xxhash_reference" }
-
-[features]
-python = ["pyo3"]
 
 [profile.bench]
 debug = true
