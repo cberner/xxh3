@@ -8,7 +8,7 @@ license = "MIT OR Apache-2.0"
 version = "0.1.1"
 edition = "2024"
 rust-version = "1.85"
-authors = ["Christopher Berner <christopherberner@gmail.com>"]
+authors = ["Christopher Berner <me@cberner.com>"]
 
 [lib]
 crate-type = ["cdylib", "rlib"]
