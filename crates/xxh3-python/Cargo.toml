@@ -1,0 +1,23 @@
+[package]
+name = "xxh3-python"
+description = "Python bindings for xxh3"
+publish = false
+version = "0.1.1"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "xxh3"
+doc = false
+crate-type = ["cdylib"]
+
+[build-dependencies]
+pyo3-build-config = "0.25.1"
+
+[dependencies]
+pyo3 = { version = "0.25.1", features=["extension-module", "abi3-py37"] }
+xxh3 = { path = "../.." }

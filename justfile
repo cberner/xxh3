@@ -17,13 +17,17 @@ flamegraph:
 
 publish_py: test_py
     docker pull quay.io/pypa/manylinux2014_x86_64
-    docker run -it --rm -v `pwd`:/xxh3 quay.io/pypa/manylinux2014_x86_64 /xxh3/py_publish.sh
+    docker run -it --rm -v `pwd`:/xxh3-ro:ro quay.io/pypa/manylinux2014_x86_64 /xxh3-ro/crates/xxh3-python/py_publish.sh
+
+py_venv:
+    [ -d venv ] || python3 -m venv venv
+    . ./venv/bin/activate && pip install -U maturin
 
 test_py: install_py
-    python3 -m unittest discover
+    . ./venv/bin/activate && python3 -m unittest discover --start-directory=./crates/xxh3-python
 
-install_py: pre
-    maturin develop
+install_py: pre py_venv
+    . ./venv/bin/activate && maturin develop --manifest-path=./crates/xxh3-python/Cargo.toml
 
 test: pre
     RUST_BACKTRACE=1 cargo test
