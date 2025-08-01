@@ -32,5 +32,9 @@ xxhash_reference = { path = "./xxhash_reference" }
 debug = true
 
 [[bench]]
-name = "benchmark"
+name = "benchmark_64"
+harness = false
+
+[[bench]]
+name = "benchmark_128"
 harness = false

@@ -8,11 +8,11 @@ pre:
     cargo clippy --all --all-targets
 
 bench: pre
-    cargo bench
+    cargo bench --bench benchmark_128
     firefox ./target/criterion/report/index.html
 
 flamegraph:
-    cargo flamegraph --bench benchmark -- --bench
+    cargo flamegraph --bench benchmark_128 -- --bench
     firefox ./flamegraph.svg
 
 publish_py: test_py
