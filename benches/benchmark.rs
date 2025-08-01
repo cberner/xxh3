@@ -1,5 +1,6 @@
-use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use rand::Rng;
+use std::hint::black_box;
 
 fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("XXH3_64");
