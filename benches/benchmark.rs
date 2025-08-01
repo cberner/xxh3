@@ -4,7 +4,7 @@ use std::hint::black_box;
 
 fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("XXH3_64");
-    for len in [0, 3, 8, 16, 128, 240, 512, 1024, 4096, 65536, 1048576] {
+    for len in [3, 8, 16, 128, 240, 512, 1024, 4096, 65536, 1048576] {
         let mut data = vec![0u8; len];
         for x in data.iter_mut() {
             *x = rand::rng().random();
@@ -18,7 +18,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     }
     group.finish();
     let mut group = c.benchmark_group("XXH3_128");
-    for len in [0, 3, 8, 16, 128, 240, 512, 1024, 4096, 65536, 1048576] {
+    for len in [3, 8, 16, 128, 240, 512, 1024, 4096, 65536, 1048576] {
         let mut data = vec![0u8; len];
         for x in data.iter_mut() {
             *x = rand::rng().random();
