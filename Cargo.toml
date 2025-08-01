@@ -24,7 +24,7 @@ repository = "https://github.com/cberner/xxh3"
 authors = ["Christopher Berner <me@cberner.com>"]
 
 [dev-dependencies]
-criterion = { version = "0.4.0", features=["html_reports"] }
+criterion = { version = "0.7.0", features=["html_reports"] }
 rand = "0.9"
 xxhash_reference = { path = "./xxhash_reference" }
 
