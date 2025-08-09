@@ -501,23 +501,18 @@ fn accumulate_stripe_generic(accumulators: &mut [u64; 8], data: &[u8], secret: &
     }
 }
 
-#[inline(always)]
-fn accumulate_block(
-    accumulators: &mut [u64; 8],
-    data: &[u8],
-    secret: &[u8],
-    stripes: usize,
-    accum_stripe: unsafe fn(&mut [u64; 8], &[u8], &[u8]),
-) {
-    for i in 0..stripes {
-        unsafe {
-            accum_stripe(
-                accumulators,
-                &data[i * STRIPE_LENGTH..],
-                &secret[i * SECRET_CONSUME_RATE..],
-            );
+macro_rules! accumulate_block {
+    ($acc:expr, $data:expr, $secret:expr, $stripes:expr, $accum_stripe:expr) => {{
+        for i in 0..$stripes {
+            unsafe {
+                $accum_stripe(
+                    $acc,
+                    &$data[i * STRIPE_LENGTH..],
+                    &$secret[i * SECRET_CONSUME_RATE..],
+                );
+            }
         }
-    }
+    }};
 }
 
 #[inline(always)]
@@ -535,24 +530,24 @@ fn hash_large_helper(
 
     // accumulate all the blocks
     for i in 0..blocks {
-        accumulate_block(
+        accumulate_block!(
             &mut accumulators,
             &data[i * block_len..],
             secret,
             stripes_per_block,
-            accum_stripe,
+            accum_stripe
         );
         unsafe { scramble(&mut accumulators, &secret[secret.len() - STRIPE_LENGTH..]) };
     }
 
     // trailing partial block
     let stripes = ((data.len() - 1) - block_len * blocks) / STRIPE_LENGTH;
-    accumulate_block(
+    accumulate_block!(
         &mut accumulators,
         &data[blocks * block_len..],
         secret,
         stripes,
-        accum_stripe,
+        accum_stripe
     );
 
     // trailing stripe
