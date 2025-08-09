@@ -22,6 +22,9 @@
 
 use std::mem::size_of;
 
+#[cfg(target_arch = "aarch64")]
+use std::arch::is_aarch64_feature_detected;
+
 const STRIPE_LENGTH: usize = 64;
 const SECRET_CONSUME_RATE: usize = 8;
 
@@ -158,9 +161,12 @@ pub fn hash64_with_seed(data: &[u8], seed: u64) -> u64 {
         }
         #[cfg(target_arch = "aarch64")]
         {
-            hash64_large_neon(data, seed)
+            if is_aarch64_feature_detected!("neon") {
+                unsafe {
+                    return hash64_large_neon(data, seed);
+                }
+            }
         }
-        #[cfg(not(target_arch = "aarch64"))]
         hash64_large_generic!(
             data,
             seed,
@@ -188,10 +194,11 @@ pub fn hash128_with_seed(data: &[u8], seed: u64) -> u128 {
             }
         }
         #[cfg(target_arch = "aarch64")]
-        {
-            hash128_large_neon(data, seed)
+        if is_aarch64_feature_detected!("neon") {
+            unsafe {
+                return hash128_large_neon(data, seed);
+            }
         }
-        #[cfg(not(target_arch = "aarch64"))]
         hash128_large_generic!(
             data,
             seed,
@@ -254,99 +261,93 @@ fn merge_accumulators(
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "avx2")]
 fn scramble_accumulators_avx2(accumulators: &mut [u64; INIT_ACCUMULATORS.len()], secret: &[u8]) {
-    unsafe {
-        #[cfg(target_arch = "x86")]
-        use std::arch::x86::*;
-        #[cfg(target_arch = "x86_64")]
-        use std::arch::x86_64::*;
+    #[cfg(target_arch = "x86")]
+    use std::arch::x86::*;
+    #[cfg(target_arch = "x86_64")]
+    use std::arch::x86_64::*;
 
-        #[allow(clippy::cast_possible_truncation)]
-        let simd_prime = _mm256_set1_epi32(PRIME32[0] as i32);
-        let secret_ptr = secret.as_ptr();
-        let accumulators_ptr = accumulators.as_mut_ptr();
+    #[allow(clippy::cast_possible_truncation)]
+    let simd_prime = _mm256_set1_epi32(PRIME32[0] as i32);
+    let secret_ptr = secret.as_ptr();
+    let accumulators_ptr = accumulators.as_mut_ptr();
 
-        for i in 0..(STRIPE_LENGTH / 32) {
-            let a = _mm256_loadu_si256((accumulators_ptr as *const __m256i).add(i));
-            let shifted = _mm256_srli_epi64::<47>(a);
-            let b = _mm256_xor_si256(a, shifted);
+    for i in 0..(STRIPE_LENGTH / 32) {
+        let a = unsafe { _mm256_loadu_si256((accumulators_ptr as *const __m256i).add(i)) };
+        let shifted = _mm256_srli_epi64::<47>(a);
+        let b = _mm256_xor_si256(a, shifted);
 
-            let s = _mm256_loadu_si256((secret_ptr as *const __m256i).add(i));
-            let c = _mm256_xor_si256(b, s);
-            let c_high = _mm256_shuffle_epi32::<49>(c);
+        let s = unsafe { _mm256_loadu_si256((secret_ptr as *const __m256i).add(i)) };
+        let c = _mm256_xor_si256(b, s);
+        let c_high = _mm256_shuffle_epi32::<49>(c);
 
-            let low = _mm256_mul_epu32(c, simd_prime);
-            let high = _mm256_mul_epu32(c_high, simd_prime);
-            let high = _mm256_slli_epi64::<32>(high);
-            let result = _mm256_add_epi64(low, high);
-            _mm256_storeu_si256((accumulators_ptr as *mut __m256i).add(i), result);
-        }
+        let low = _mm256_mul_epu32(c, simd_prime);
+        let high = _mm256_mul_epu32(c_high, simd_prime);
+        let high = _mm256_slli_epi64::<32>(high);
+        let result = _mm256_add_epi64(low, high);
+        unsafe { _mm256_storeu_si256((accumulators_ptr as *mut __m256i).add(i), result) };
     }
 }
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "avx512f")]
 fn scramble_accumulators_avx512(accumulators: &mut [u64; INIT_ACCUMULATORS.len()], secret: &[u8]) {
-    unsafe {
-        #[cfg(target_arch = "x86")]
-        use std::arch::x86::*;
-        #[cfg(target_arch = "x86_64")]
-        use std::arch::x86_64::*;
+    #[cfg(target_arch = "x86")]
+    use std::arch::x86::*;
+    #[cfg(target_arch = "x86_64")]
+    use std::arch::x86_64::*;
 
-        #[allow(clippy::cast_possible_truncation)]
-        let simd_prime = _mm512_set1_epi32(PRIME32[0] as i32);
-        let secret_ptr = secret.as_ptr();
-        let accumulators_ptr = accumulators.as_mut_ptr();
+    #[allow(clippy::cast_possible_truncation)]
+    let simd_prime = _mm512_set1_epi32(PRIME32[0] as i32);
+    let secret_ptr = secret.as_ptr();
+    let accumulators_ptr = accumulators.as_mut_ptr();
 
-        let a = _mm512_loadu_si512(accumulators_ptr as *const __m512i);
-        let shifted = _mm512_srli_epi64::<47>(a);
-        let b = _mm512_xor_si512(a, shifted);
+    let a = unsafe { _mm512_loadu_si512(accumulators_ptr as *const __m512i) };
+    let shifted = _mm512_srli_epi64::<47>(a);
+    let b = _mm512_xor_si512(a, shifted);
 
-        let s = _mm512_loadu_si512(secret_ptr as *const __m512i);
-        let c = _mm512_xor_si512(b, s);
-        let c_high = _mm512_shuffle_epi32::<49>(c);
+    let s = unsafe { _mm512_loadu_si512(secret_ptr as *const __m512i) };
+    let c = _mm512_xor_si512(b, s);
+    let c_high = _mm512_shuffle_epi32::<49>(c);
 
-        let low = _mm512_mul_epu32(c, simd_prime);
-        let high = _mm512_mul_epu32(c_high, simd_prime);
-        let high = _mm512_slli_epi64::<32>(high);
-        let result = _mm512_add_epi64(low, high);
-        _mm512_storeu_si512(accumulators_ptr as *mut __m512i, result);
-    }
+    let low = _mm512_mul_epu32(c, simd_prime);
+    let high = _mm512_mul_epu32(c_high, simd_prime);
+    let high = _mm512_slli_epi64::<32>(high);
+    let result = _mm512_add_epi64(low, high);
+    unsafe { _mm512_storeu_si512(accumulators_ptr as *mut __m512i, result) };
 }
 
 #[cfg(target_arch = "aarch64")]
+#[target_feature(enable = "neon")]
 fn scramble_accumulators_neon(accumulators: &mut [u64; INIT_ACCUMULATORS.len()], secret: &[u8]) {
     #[cfg(target_arch = "aarch64")]
     use std::arch::aarch64::*;
     #[cfg(target_arch = "arm")]
     use std::arch::arm::*;
 
-    unsafe {
-        let prime = vdup_n_u32(PRIME32[0].try_into().unwrap());
+    let prime = vdup_n_u32(PRIME32[0].try_into().unwrap());
 
-        let accum_ptr = accumulators.as_mut_ptr();
-        let secret_ptr = secret.as_ptr();
-        assert!(secret.len() >= STRIPE_LENGTH);
-        for i in 0..(STRIPE_LENGTH / 16) {
-            // xorshift
-            let accum = vld1q_u64(accum_ptr.add(i * 2));
-            let shifted = vshrq_n_u64(accum, 47);
-            let accum = veorq_u64(accum, shifted);
+    let accum_ptr = accumulators.as_mut_ptr();
+    let secret_ptr = secret.as_ptr();
+    assert!(secret.len() >= STRIPE_LENGTH);
+    for i in 0..(STRIPE_LENGTH / 16) {
+        // xorshift
+        let accum = unsafe { vld1q_u64(accum_ptr.add(i * 2)) };
+        let shifted = vshrq_n_u64(accum, 47);
+        let accum = veorq_u64(accum, shifted);
 
-            // xor with secret
-            let s = vld1q_u8(secret_ptr.add(i * 16));
-            let accum = veorq_u64(accum, vreinterpretq_u64_u8(s));
+        // xor with secret
+        let s = unsafe { vld1q_u8(secret_ptr.add(i * 16)) };
+        let accum = veorq_u64(accum, vreinterpretq_u64_u8(s));
 
-            // mul with prime. Sadly there's no vmulq_u64
-            let accum_low = vmovn_u64(accum);
-            let accum_high = vshrn_n_u64(accum, 32);
-            let prod_high = vshlq_n_u64(vmull_u32(accum_high, prime), 32);
-            let accum = vmlal_u32(prod_high, accum_low, prime);
-            vst1q_u64(accum_ptr.add(i * 2), accum);
-        }
+        // mul with prime. Sadly there's no vmulq_u64
+        let accum_low = vmovn_u64(accum);
+        let accum_high = vshrn_n_u64(accum, 32);
+        let prod_high = vshlq_n_u64(vmull_u32(accum_high, prime), 32);
+        let accum = vmlal_u32(prod_high, accum_low, prime);
+        unsafe { vst1q_u64(accum_ptr.add(i * 2), accum) };
     }
 }
 
-#[cfg(not(target_arch = "aarch64"))]
 fn scramble_accumulators_generic(accumulators: &mut [u64; INIT_ACCUMULATORS.len()], secret: &[u8]) {
     for (i, x) in accumulators.iter_mut().enumerate() {
         let s = get_u64(secret, i);
@@ -410,160 +411,149 @@ fn gen_secret_generic(seed: u64) -> [u8; DEFAULT_SECRET.len()] {
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "avx2")]
 fn gen_secret_avx2(seed: u64) -> [u8; DEFAULT_SECRET.len()] {
-    unsafe {
-        #[cfg(target_arch = "x86")]
-        use std::arch::x86::*;
-        #[cfg(target_arch = "x86_64")]
-        use std::arch::x86_64::*;
+    #[cfg(target_arch = "x86")]
+    use std::arch::x86::*;
+    #[cfg(target_arch = "x86_64")]
+    use std::arch::x86_64::*;
 
-        #[allow(clippy::cast_possible_wrap)]
-        let xxh_i64 = 0u64.wrapping_sub(seed) as i64;
-        #[allow(clippy::cast_possible_wrap)]
-        let seed = seed as i64;
+    #[allow(clippy::cast_possible_wrap)]
+    let xxh_i64 = 0u64.wrapping_sub(seed) as i64;
+    #[allow(clippy::cast_possible_wrap)]
+    let seed = seed as i64;
 
-        let simd_seed = _mm256_set_epi64x(xxh_i64, seed, xxh_i64, seed);
+    let simd_seed = _mm256_set_epi64x(xxh_i64, seed, xxh_i64, seed);
 
-        let mut output = [0u8; DEFAULT_SECRET.len()];
-        let output_ptr = output.as_mut_ptr();
-        let secret_ptr = DEFAULT_SECRET.as_ptr();
-        for i in 0..6 {
-            let s = _mm256_loadu_si256((secret_ptr as *const __m256i).add(i));
-            let x = _mm256_add_epi64(s, simd_seed);
-            _mm256_storeu_si256((output_ptr as *mut __m256i).add(i), x);
-        }
-
-        output
+    let mut output = [0u8; DEFAULT_SECRET.len()];
+    let output_ptr = output.as_mut_ptr();
+    let secret_ptr = DEFAULT_SECRET.as_ptr();
+    for i in 0..6 {
+        let s = unsafe { _mm256_loadu_si256((secret_ptr as *const __m256i).add(i)) };
+        let x = _mm256_add_epi64(s, simd_seed);
+        unsafe { _mm256_storeu_si256((output_ptr as *mut __m256i).add(i), x) };
     }
+
+    output
 }
 
 #[allow(clippy::cast_possible_truncation)]
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "avx512f")]
 fn gen_secret_avx512(seed: u64) -> [u8; DEFAULT_SECRET.len()] {
-    unsafe {
-        #[cfg(target_arch = "x86")]
-        use std::arch::x86::*;
-        #[cfg(target_arch = "x86_64")]
-        use std::arch::x86_64::*;
+    #[cfg(target_arch = "x86")]
+    use std::arch::x86::*;
+    #[cfg(target_arch = "x86_64")]
+    use std::arch::x86_64::*;
 
-        #[allow(clippy::cast_possible_wrap)]
-        let xxh_i64 = 0u64.wrapping_sub(seed) as i64;
-        #[allow(clippy::cast_possible_wrap)]
-        let seed = seed as i64;
+    #[allow(clippy::cast_possible_wrap)]
+    let xxh_i64 = 0u64.wrapping_sub(seed) as i64;
+    #[allow(clippy::cast_possible_wrap)]
+    let seed = seed as i64;
 
-        let simd_seed =
-            _mm512_set_epi64(xxh_i64, seed, xxh_i64, seed, xxh_i64, seed, xxh_i64, seed);
+    let simd_seed = _mm512_set_epi64(xxh_i64, seed, xxh_i64, seed, xxh_i64, seed, xxh_i64, seed);
 
-        let mut output = [0u8; DEFAULT_SECRET.len()];
-        let output_ptr = output.as_mut_ptr();
-        let secret_ptr = DEFAULT_SECRET.as_ptr();
-        for i in 0..3 {
-            let s = _mm512_loadu_si512((secret_ptr as *const __m512i).add(i));
-            let x = _mm512_add_epi64(s, simd_seed);
-            _mm512_storeu_si512((output_ptr as *mut __m512i).add(i), x);
-        }
-
-        output
+    let mut output = [0u8; DEFAULT_SECRET.len()];
+    let output_ptr = output.as_mut_ptr();
+    let secret_ptr = DEFAULT_SECRET.as_ptr();
+    for i in 0..3 {
+        let s = unsafe { _mm512_loadu_si512((secret_ptr as *const __m512i).add(i)) };
+        let x = _mm512_add_epi64(s, simd_seed);
+        unsafe { _mm512_storeu_si512((output_ptr as *mut __m512i).add(i), x) };
     }
+
+    output
 }
 
 #[cfg(target_arch = "aarch64")]
+#[target_feature(enable = "neon")]
 fn accumulate_stripe_neon(accumulators: &mut [u64; 8], data: &[u8], secret: &[u8]) {
     #[cfg(target_arch = "aarch64")]
     use std::arch::aarch64::*;
     #[cfg(target_arch = "arm")]
     use std::arch::arm::*;
 
-    unsafe {
-        let accum_ptr = accumulators.as_mut_ptr();
-        let data_ptr = data.as_ptr();
-        let secret_ptr = secret.as_ptr();
-        assert!(data.len() >= STRIPE_LENGTH);
-        assert!(secret.len() >= STRIPE_LENGTH);
-        for i in 0..(STRIPE_LENGTH / 16) {
-            let x = vld1q_u8(data_ptr.add(i * 16));
-            let s = vld1q_u8(secret_ptr.add(i * 16));
-            let x64 = vreinterpretq_u64_u8(x);
-            let y = vextq_u64(x64, x64, 1);
+    let accum_ptr = accumulators.as_mut_ptr();
+    let data_ptr = data.as_ptr();
+    let secret_ptr = secret.as_ptr();
+    assert!(data.len() >= STRIPE_LENGTH);
+    assert!(secret.len() >= STRIPE_LENGTH);
+    for i in 0..(STRIPE_LENGTH / 16) {
+        let x = unsafe { vld1q_u8(data_ptr.add(i * 16)) };
+        let s = unsafe { vld1q_u8(secret_ptr.add(i * 16)) };
+        let x64 = vreinterpretq_u64_u8(x);
+        let y = vextq_u64(x64, x64, 1);
 
-            let result = vld1q_u64(accum_ptr.add(i * 2));
-            let result = vaddq_u64(result, y);
+        let result = unsafe { vld1q_u64(accum_ptr.add(i * 2)) };
+        let result = vaddq_u64(result, y);
 
-            let z = vreinterpretq_u64_u8(veorq_u8(x, s));
-            let z_low = vmovn_u64(z);
-            let z_high = vshrn_n_u64(z, 32);
+        let z = vreinterpretq_u64_u8(veorq_u8(x, s));
+        let z_low = vmovn_u64(z);
+        let z_high = vshrn_n_u64(z, 32);
 
-            let result = vmlal_u32(result, z_low, z_high);
-            vst1q_u64(accum_ptr.add(i * 2), result);
-        }
+        let result = vmlal_u32(result, z_low, z_high);
+        unsafe { vst1q_u64(accum_ptr.add(i * 2), result) };
     }
 }
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "avx2")]
 fn accumulate_stripe_avx2(accumulators: &mut [u64; 8], data: &[u8], secret: &[u8]) {
-    unsafe {
-        #[cfg(target_arch = "x86")]
-        use std::arch::x86::*;
-        #[cfg(target_arch = "x86_64")]
-        use std::arch::x86_64::*;
+    #[cfg(target_arch = "x86")]
+    use std::arch::x86::*;
+    #[cfg(target_arch = "x86_64")]
+    use std::arch::x86_64::*;
 
-        let data_ptr = data.as_ptr();
-        let secret_ptr = secret.as_ptr();
-        let accumulator_ptr = accumulators.as_mut_ptr();
+    let data_ptr = data.as_ptr();
+    let secret_ptr = secret.as_ptr();
+    let accumulator_ptr = accumulators.as_mut_ptr();
 
-        assert!(data.len() >= STRIPE_LENGTH);
-        assert!(secret.len() >= STRIPE_LENGTH);
-        for i in 0..(STRIPE_LENGTH / 32) {
-            let x = _mm256_loadu_si256((data_ptr as *const __m256i).add(i));
-            let s = _mm256_loadu_si256((secret_ptr as *const __m256i).add(i));
+    assert!(data.len() >= STRIPE_LENGTH);
+    assert!(secret.len() >= STRIPE_LENGTH);
+    for i in 0..(STRIPE_LENGTH / 32) {
+        let x = unsafe { _mm256_loadu_si256((data_ptr as *const __m256i).add(i)) };
+        let s = unsafe { _mm256_loadu_si256((secret_ptr as *const __m256i).add(i)) };
 
-            let z = _mm256_xor_si256(x, s);
-            let z_low = _mm256_shuffle_epi32::<49>(z);
+        let z = _mm256_xor_si256(x, s);
+        let z_low = _mm256_shuffle_epi32::<49>(z);
 
-            let product = _mm256_mul_epu32(z, z_low);
-            let shuffled = _mm256_shuffle_epi32::<78>(x);
+        let product = _mm256_mul_epu32(z, z_low);
+        let shuffled = _mm256_shuffle_epi32::<78>(x);
 
-            let result = _mm256_loadu_si256((accumulator_ptr as *const __m256i).add(i));
-            let result = _mm256_add_epi64(result, shuffled);
-            let result = _mm256_add_epi64(result, product);
-            _mm256_storeu_si256((accumulator_ptr as *mut __m256i).add(i), result);
-        }
+        let result = unsafe { _mm256_loadu_si256((accumulator_ptr as *const __m256i).add(i)) };
+        let result = _mm256_add_epi64(result, shuffled);
+        let result = _mm256_add_epi64(result, product);
+        unsafe { _mm256_storeu_si256((accumulator_ptr as *mut __m256i).add(i), result) };
     }
 }
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "avx512f")]
 fn accumulate_stripe_avx512(accumulators: &mut [u64; 8], data: &[u8], secret: &[u8]) {
-    unsafe {
-        #[cfg(target_arch = "x86")]
-        use std::arch::x86::*;
-        #[cfg(target_arch = "x86_64")]
-        use std::arch::x86_64::*;
+    #[cfg(target_arch = "x86")]
+    use std::arch::x86::*;
+    #[cfg(target_arch = "x86_64")]
+    use std::arch::x86_64::*;
 
-        let data_ptr = data.as_ptr();
-        let secret_ptr = secret.as_ptr();
-        let accumulator_ptr = accumulators.as_mut_ptr();
+    let data_ptr = data.as_ptr();
+    let secret_ptr = secret.as_ptr();
+    let accumulator_ptr = accumulators.as_mut_ptr();
 
-        assert!(data.len() >= STRIPE_LENGTH);
-        assert!(secret.len() >= STRIPE_LENGTH);
-        let x = _mm512_loadu_si512(data_ptr as *const __m512i);
-        let s = _mm512_loadu_si512(secret_ptr as *const __m512i);
+    assert!(data.len() >= STRIPE_LENGTH);
+    assert!(secret.len() >= STRIPE_LENGTH);
+    let x = unsafe { _mm512_loadu_si512(data_ptr as *const __m512i) };
+    let s = unsafe { _mm512_loadu_si512(secret_ptr as *const __m512i) };
 
-        let z = _mm512_xor_si512(x, s);
-        let z_low = _mm512_shuffle_epi32::<49>(z);
+    let z = _mm512_xor_si512(x, s);
+    let z_low = _mm512_shuffle_epi32::<49>(z);
 
-        let product = _mm512_mul_epu32(z, z_low);
-        let shuffled = _mm512_shuffle_epi32::<78>(x);
+    let product = _mm512_mul_epu32(z, z_low);
+    let shuffled = _mm512_shuffle_epi32::<78>(x);
 
-        let result = _mm512_loadu_si512(accumulator_ptr as *const __m512i);
-        let result = _mm512_add_epi64(result, shuffled);
-        let result = _mm512_add_epi64(result, product);
-        _mm512_storeu_si512(accumulator_ptr as *mut __m512i, result);
-    }
+    let result = unsafe { _mm512_loadu_si512(accumulator_ptr as *const __m512i) };
+    let result = _mm512_add_epi64(result, shuffled);
+    let result = _mm512_add_epi64(result, product);
+    unsafe { _mm512_storeu_si512(accumulator_ptr as *mut __m512i, result) };
 }
 
-#[cfg(not(target_arch = "aarch64"))]
 fn accumulate_stripe_generic(accumulators: &mut [u64; 8], data: &[u8], secret: &[u8]) {
     for i in 0..accumulators.len() {
         let x = get_u64(&data[i * 8..], 0);
@@ -674,6 +664,7 @@ fn hash64_0to240(data: &[u8], secret: &[u8], seed: u64) -> u64 {
 }
 
 #[cfg(target_arch = "aarch64")]
+#[target_feature(enable = "neon")]
 fn hash64_large_neon(data: &[u8], seed: u64) -> u64 {
     hash64_large_generic!(
         data,
@@ -874,6 +865,7 @@ fn hash128_0to240(data: &[u8], secret: &[u8], seed: u64) -> u128 {
 }
 
 #[cfg(target_arch = "aarch64")]
+#[target_feature(enable = "neon")]
 fn hash128_large_neon(data: &[u8], seed: u64) -> u128 {
     hash128_large_generic!(
         data,
