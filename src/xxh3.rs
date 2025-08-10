@@ -139,6 +139,7 @@ macro_rules! hash128_large_generic {
     }};
 }
 
+#[must_use]
 pub fn hash64_with_seed(data: &[u8], seed: u64) -> u64 {
     if data.len() <= 240 {
         hash64_0to240(data, &DEFAULT_SECRET, seed)
@@ -177,6 +178,7 @@ pub fn hash64_with_seed(data: &[u8], seed: u64) -> u64 {
     }
 }
 
+#[must_use]
 pub fn hash128_with_seed(data: &[u8], seed: u64) -> u128 {
     if data.len() <= 240 {
         hash128_0to240(data, &DEFAULT_SECRET, seed)
@@ -241,7 +243,6 @@ fn xxh3_avalanche(mut x: u64) -> u64 {
     x
 }
 
-#[inline(always)]
 fn merge_accumulators(
     accumulators: [u64; INIT_ACCUMULATORS.len()],
     secret: &[u8],
