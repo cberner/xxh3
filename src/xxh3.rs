@@ -276,7 +276,7 @@ fn scramble_accumulators_avx2(accumulators: &mut [u64; INIT_ACCUMULATORS.len()],
         let shifted = _mm256_srli_epi64::<47>(a);
         let b = _mm256_xor_si256(a, shifted);
 
-        let s = unsafe { _mm256_loadu_si256((secret_ptr as *const __m256i).add(i)) };
+        let s = unsafe { _mm256_loadu_si256(secret_ptr.cast::<__m256i>().add(i)) };
         let c = _mm256_xor_si256(b, s);
         let c_high = _mm256_shuffle_epi32::<49>(c);
 
@@ -284,7 +284,7 @@ fn scramble_accumulators_avx2(accumulators: &mut [u64; INIT_ACCUMULATORS.len()],
         let high = _mm256_mul_epu32(c_high, simd_prime);
         let high = _mm256_slli_epi64::<32>(high);
         let result = _mm256_add_epi64(low, high);
-        unsafe { _mm256_storeu_si256((accumulators_ptr as *mut __m256i).add(i), result) };
+        unsafe { _mm256_storeu_si256(accumulators_ptr.cast::<__m256i>().add(i), result) };
     }
 }
 
@@ -305,7 +305,7 @@ fn scramble_accumulators_avx512(accumulators: &mut [u64; INIT_ACCUMULATORS.len()
     let shifted = _mm512_srli_epi64::<47>(a);
     let b = _mm512_xor_si512(a, shifted);
 
-    let s = unsafe { _mm512_loadu_si512(secret_ptr as *const __m512i) };
+    let s = unsafe { _mm512_loadu_si512(secret_ptr.cast::<__m512i>()) };
     let c = _mm512_xor_si512(b, s);
     let c_high = _mm512_shuffle_epi32::<49>(c);
 
@@ -313,7 +313,7 @@ fn scramble_accumulators_avx512(accumulators: &mut [u64; INIT_ACCUMULATORS.len()
     let high = _mm512_mul_epu32(c_high, simd_prime);
     let high = _mm512_slli_epi64::<32>(high);
     let result = _mm512_add_epi64(low, high);
-    unsafe { _mm512_storeu_si512(accumulators_ptr as *mut __m512i, result) };
+    unsafe { _mm512_storeu_si512(accumulators_ptr.cast::<__m512i>(), result) };
 }
 
 #[cfg(target_arch = "aarch64")]
@@ -427,9 +427,9 @@ fn gen_secret_avx2(seed: u64) -> [u8; DEFAULT_SECRET.len()] {
     let output_ptr = output.as_mut_ptr();
     let secret_ptr = DEFAULT_SECRET.as_ptr();
     for i in 0..6 {
-        let s = unsafe { _mm256_loadu_si256((secret_ptr as *const __m256i).add(i)) };
+        let s = unsafe { _mm256_loadu_si256(secret_ptr.cast::<__m256i>().add(i)) };
         let x = _mm256_add_epi64(s, simd_seed);
-        unsafe { _mm256_storeu_si256((output_ptr as *mut __m256i).add(i), x) };
+        unsafe { _mm256_storeu_si256(output_ptr.cast::<__m256i>().add(i), x) };
     }
 
     output
@@ -455,9 +455,9 @@ fn gen_secret_avx512(seed: u64) -> [u8; DEFAULT_SECRET.len()] {
     let output_ptr = output.as_mut_ptr();
     let secret_ptr = DEFAULT_SECRET.as_ptr();
     for i in 0..3 {
-        let s = unsafe { _mm512_loadu_si512((secret_ptr as *const __m512i).add(i)) };
+        let s = unsafe { _mm512_loadu_si512(secret_ptr.cast::<__m512i>().add(i)) };
         let x = _mm512_add_epi64(s, simd_seed);
-        unsafe { _mm512_storeu_si512((output_ptr as *mut __m512i).add(i), x) };
+        unsafe { _mm512_storeu_si512(output_ptr.cast::<__m512i>().add(i), x) };
     }
 
     output
@@ -509,8 +509,8 @@ fn accumulate_stripe_avx2(accumulators: &mut [u64; 8], data: &[u8], secret: &[u8
     assert!(data.len() >= STRIPE_LENGTH);
     assert!(secret.len() >= STRIPE_LENGTH);
     for i in 0..(STRIPE_LENGTH / 32) {
-        let x = unsafe { _mm256_loadu_si256((data_ptr as *const __m256i).add(i)) };
-        let s = unsafe { _mm256_loadu_si256((secret_ptr as *const __m256i).add(i)) };
+        let x = unsafe { _mm256_loadu_si256(data_ptr.cast::<__m256i>().add(i)) };
+        let s = unsafe { _mm256_loadu_si256(secret_ptr.cast::<__m256i>().add(i)) };
 
         let z = _mm256_xor_si256(x, s);
         let z_low = _mm256_shuffle_epi32::<49>(z);
@@ -521,7 +521,7 @@ fn accumulate_stripe_avx2(accumulators: &mut [u64; 8], data: &[u8], secret: &[u8
         let result = unsafe { _mm256_loadu_si256((accumulator_ptr as *const __m256i).add(i)) };
         let result = _mm256_add_epi64(result, shuffled);
         let result = _mm256_add_epi64(result, product);
-        unsafe { _mm256_storeu_si256((accumulator_ptr as *mut __m256i).add(i), result) };
+        unsafe { _mm256_storeu_si256(accumulator_ptr.cast::<__m256i>().add(i), result) };
     }
 }
 
@@ -539,8 +539,8 @@ fn accumulate_stripe_avx512(accumulators: &mut [u64; 8], data: &[u8], secret: &[
 
     assert!(data.len() >= STRIPE_LENGTH);
     assert!(secret.len() >= STRIPE_LENGTH);
-    let x = unsafe { _mm512_loadu_si512(data_ptr as *const __m512i) };
-    let s = unsafe { _mm512_loadu_si512(secret_ptr as *const __m512i) };
+    let x = unsafe { _mm512_loadu_si512(data_ptr.cast::<__m512i>()) };
+    let s = unsafe { _mm512_loadu_si512(secret_ptr.cast::<__m512i>()) };
 
     let z = _mm512_xor_si512(x, s);
     let z_low = _mm512_shuffle_epi32::<49>(z);
@@ -551,7 +551,7 @@ fn accumulate_stripe_avx512(accumulators: &mut [u64; 8], data: &[u8], secret: &[
     let result = unsafe { _mm512_loadu_si512(accumulator_ptr as *const __m512i) };
     let result = _mm512_add_epi64(result, shuffled);
     let result = _mm512_add_epi64(result, product);
-    unsafe { _mm512_storeu_si512(accumulator_ptr as *mut __m512i, result) };
+    unsafe { _mm512_storeu_si512(accumulator_ptr.cast::<__m512i>(), result) };
 }
 
 fn accumulate_stripe_generic(accumulators: &mut [u64; 8], data: &[u8], secret: &[u8]) {
