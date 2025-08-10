@@ -560,7 +560,7 @@ fn accumulate_stripe_generic(accumulators: &mut [u64; 8], data: &[u8], secret: &
         let y = x ^ get_u64(&secret[i * 8..], 0);
         accumulators[i ^ 1] = accumulators[i ^ 1].wrapping_add(x);
         let z = (y & 0xFFFF_FFFF) * (y >> 32);
-        accumulators[i] = accumulators[i].wrapping_add(z)
+        accumulators[i] = accumulators[i].wrapping_add(z);
     }
 }
 
