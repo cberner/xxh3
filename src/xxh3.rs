@@ -22,7 +22,9 @@
 
 use std::mem::size_of;
 
-#[cfg(target_arch = "aarch64")]
+// The NEON code loads bytes into its 64-bit lanes in the target's byte order, which is the
+// little-endian order xxh3 is defined in only on a little-endian target
+#[cfg(all(target_arch = "aarch64", target_endian = "little"))]
 use std::arch::is_aarch64_feature_detected;
 
 const STRIPE_LENGTH: usize = 64;
@@ -160,7 +162,7 @@ pub fn hash64_with_seed(data: &[u8], seed: u64) -> u64 {
                 }
             }
         }
-        #[cfg(target_arch = "aarch64")]
+        #[cfg(all(target_arch = "aarch64", target_endian = "little"))]
         {
             if is_aarch64_feature_detected!("neon") {
                 unsafe {
@@ -195,7 +197,7 @@ pub fn hash128_with_seed(data: &[u8], seed: u64) -> u128 {
                 return hash128_large_avx2(data, seed);
             }
         }
-        #[cfg(target_arch = "aarch64")]
+        #[cfg(all(target_arch = "aarch64", target_endian = "little"))]
         if is_aarch64_feature_detected!("neon") {
             unsafe {
                 return hash128_large_neon(data, seed);
@@ -317,7 +319,7 @@ fn scramble_accumulators_avx512(accumulators: &mut [u64; INIT_ACCUMULATORS.len()
     unsafe { _mm512_storeu_si512(accumulators_ptr.cast::<__m512i>(), result) };
 }
 
-#[cfg(target_arch = "aarch64")]
+#[cfg(all(target_arch = "aarch64", target_endian = "little"))]
 #[target_feature(enable = "neon")]
 fn scramble_accumulators_neon(accumulators: &mut [u64; INIT_ACCUMULATORS.len()], secret: &[u8]) {
     #[cfg(target_arch = "aarch64")]
@@ -464,7 +466,7 @@ fn gen_secret_avx512(seed: u64) -> [u8; DEFAULT_SECRET.len()] {
     output
 }
 
-#[cfg(target_arch = "aarch64")]
+#[cfg(all(target_arch = "aarch64", target_endian = "little"))]
 #[target_feature(enable = "neon")]
 fn accumulate_stripe_neon(accumulators: &mut [u64; 8], data: &[u8], secret: &[u8]) {
     #[cfg(target_arch = "aarch64")]
@@ -664,7 +666,7 @@ fn hash64_0to240(data: &[u8], secret: &[u8], seed: u64) -> u64 {
     }
 }
 
-#[cfg(target_arch = "aarch64")]
+#[cfg(all(target_arch = "aarch64", target_endian = "little"))]
 #[target_feature(enable = "neon")]
 fn hash64_large_neon(data: &[u8], seed: u64) -> u64 {
     hash64_large_generic!(
@@ -869,7 +871,7 @@ fn hash128_0to240(data: &[u8], secret: &[u8], seed: u64) -> u128 {
     }
 }
 
-#[cfg(target_arch = "aarch64")]
+#[cfg(all(target_arch = "aarch64", target_endian = "little"))]
 #[target_feature(enable = "neon")]
 fn hash128_large_neon(data: &[u8], seed: u64) -> u128 {
     hash128_large_generic!(
@@ -907,11 +909,76 @@ fn hash128_large_avx512(data: &[u8], seed: u64) -> u128 {
 
 #[cfg(test)]
 mod test {
-    use crate::xxh3::hash64_with_seed;
+    use crate::xxh3::{hash64_with_seed, hash128_with_seed};
 
     #[test]
     fn test_empty() {
         let actual = hash64_with_seed(&[], 0);
         assert_eq!(actual, 3244421341483603138);
+    }
+
+    // Inputs longer than 240 bytes, which take the vectorized paths. The expected values are the
+    // C reference implementation's
+    #[test]
+    fn test_large_inputs() {
+        const EXPECTED: [(usize, u64, u64, u128); 8] = [
+            (
+                241,
+                0x0,
+                0x0b3b630948ce4a00,
+                0x92b991a7192f3f080b3b630948ce4a00,
+            ),
+            (
+                241,
+                0x9e3779b97f4a7c15,
+                0x422e82e8913e49e0,
+                0xc39cbfb460caf47e422e82e8913e49e0,
+            ),
+            (
+                1000,
+                0x0,
+                0x989765d0ea7a5ecd,
+                0xf534f51e82a81d29989765d0ea7a5ecd,
+            ),
+            (
+                1000,
+                0x9e3779b97f4a7c15,
+                0x75b5719d9f31a6a2,
+                0x4022020c7b531e8075b5719d9f31a6a2,
+            ),
+            (
+                1024,
+                0x0,
+                0x23bc880ebf0d29c6,
+                0x4c17271c906df79223bc880ebf0d29c6,
+            ),
+            (
+                1024,
+                0x9e3779b97f4a7c15,
+                0x7e249adc60e1f9b4,
+                0x927c8d2b50d33f537e249adc60e1f9b4,
+            ),
+            (
+                4103,
+                0x0,
+                0xad0017645a159db5,
+                0xcfcfb4f1ff0083d9ad0017645a159db5,
+            ),
+            (
+                4103,
+                0x9e3779b97f4a7c15,
+                0x35133e0318e9f178,
+                0xb3813683cf0b01b435133e0318e9f178,
+            ),
+        ];
+        for (len, seed, expected64, expected128) in EXPECTED {
+            let data: Vec<u8> = (0..len).map(|i| (i * 31 + 7).to_le_bytes()[0]).collect();
+            assert_eq!(hash64_with_seed(&data, seed), expected64, "{len} {seed:#x}");
+            assert_eq!(
+                hash128_with_seed(&data, seed),
+                expected128,
+                "{len} {seed:#x}"
+            );
+        }
     }
 }
