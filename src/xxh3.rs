@@ -108,7 +108,7 @@ macro_rules! hash_large_helper {
     }};
 }
 
-macro_rules! hash64_large_generic {
+macro_rules! hash64_large_impl {
     ($data:expr, $seed:expr, $generate:expr, $scramble:expr, $accum_stripe:expr) => {{
         let secret = $generate($seed);
         let accumulators = hash_large_helper!($data, &secret, $scramble, $accum_stripe);
@@ -121,7 +121,7 @@ macro_rules! hash64_large_generic {
     }};
 }
 
-macro_rules! hash128_large_generic {
+macro_rules! hash128_large_impl {
     ($data:expr, $seed:expr, $generate:expr, $scramble:expr, $accum_stripe:expr) => {{
         let secret = $generate($seed);
         let accumulators = hash_large_helper!($data, &secret, $scramble, $accum_stripe);
@@ -170,13 +170,7 @@ pub fn hash64_with_seed(data: &[u8], seed: u64) -> u64 {
                 }
             }
         }
-        hash64_large_generic!(
-            data,
-            seed,
-            gen_secret_generic,
-            scramble_accumulators_generic,
-            accumulate_stripe_generic
-        )
+        hash64_large_generic(data, seed)
     }
 }
 
@@ -203,13 +197,7 @@ pub fn hash128_with_seed(data: &[u8], seed: u64) -> u128 {
                 return hash128_large_neon(data, seed);
             }
         }
-        hash128_large_generic!(
-            data,
-            seed,
-            gen_secret_generic,
-            scramble_accumulators_generic,
-            accumulate_stripe_generic
-        )
+        hash128_large_generic(data, seed)
     }
 }
 
@@ -666,10 +654,20 @@ fn hash64_0to240(data: &[u8], secret: &[u8], seed: u64) -> u64 {
     }
 }
 
+fn hash64_large_generic(data: &[u8], seed: u64) -> u64 {
+    hash64_large_impl!(
+        data,
+        seed,
+        gen_secret_generic,
+        scramble_accumulators_generic,
+        accumulate_stripe_generic
+    )
+}
+
 #[cfg(all(target_arch = "aarch64", target_endian = "little"))]
 #[target_feature(enable = "neon")]
 fn hash64_large_neon(data: &[u8], seed: u64) -> u64 {
-    hash64_large_generic!(
+    hash64_large_impl!(
         data,
         seed,
         gen_secret_generic,
@@ -681,7 +679,7 @@ fn hash64_large_neon(data: &[u8], seed: u64) -> u64 {
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "avx2")]
 fn hash64_large_avx2(data: &[u8], seed: u64) -> u64 {
-    hash64_large_generic!(
+    hash64_large_impl!(
         data,
         seed,
         gen_secret_avx2,
@@ -693,7 +691,7 @@ fn hash64_large_avx2(data: &[u8], seed: u64) -> u64 {
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "avx512f")]
 fn hash64_large_avx512(data: &[u8], seed: u64) -> u64 {
-    hash64_large_generic!(
+    hash64_large_impl!(
         data,
         seed,
         gen_secret_avx512,
@@ -871,10 +869,20 @@ fn hash128_0to240(data: &[u8], secret: &[u8], seed: u64) -> u128 {
     }
 }
 
+fn hash128_large_generic(data: &[u8], seed: u64) -> u128 {
+    hash128_large_impl!(
+        data,
+        seed,
+        gen_secret_generic,
+        scramble_accumulators_generic,
+        accumulate_stripe_generic
+    )
+}
+
 #[cfg(all(target_arch = "aarch64", target_endian = "little"))]
 #[target_feature(enable = "neon")]
 fn hash128_large_neon(data: &[u8], seed: u64) -> u128 {
-    hash128_large_generic!(
+    hash128_large_impl!(
         data,
         seed,
         gen_secret_generic,
@@ -886,7 +894,7 @@ fn hash128_large_neon(data: &[u8], seed: u64) -> u128 {
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "avx2")]
 fn hash128_large_avx2(data: &[u8], seed: u64) -> u128 {
-    hash128_large_generic!(
+    hash128_large_impl!(
         data,
         seed,
         gen_secret_avx2,
@@ -898,7 +906,7 @@ fn hash128_large_avx2(data: &[u8], seed: u64) -> u128 {
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "avx512f")]
 fn hash128_large_avx512(data: &[u8], seed: u64) -> u128 {
-    hash128_large_generic!(
+    hash128_large_impl!(
         data,
         seed,
         gen_secret_avx512,
@@ -908,77 +916,4 @@ fn hash128_large_avx512(data: &[u8], seed: u64) -> u128 {
 }
 
 #[cfg(test)]
-mod test {
-    use crate::xxh3::{hash64_with_seed, hash128_with_seed};
-
-    #[test]
-    fn test_empty() {
-        let actual = hash64_with_seed(&[], 0);
-        assert_eq!(actual, 3244421341483603138);
-    }
-
-    // Inputs longer than 240 bytes, which take the vectorized paths. The expected values are the
-    // C reference implementation's
-    #[test]
-    fn test_large_inputs() {
-        const EXPECTED: [(usize, u64, u64, u128); 8] = [
-            (
-                241,
-                0x0,
-                0x0b3b630948ce4a00,
-                0x92b991a7192f3f080b3b630948ce4a00,
-            ),
-            (
-                241,
-                0x9e3779b97f4a7c15,
-                0x422e82e8913e49e0,
-                0xc39cbfb460caf47e422e82e8913e49e0,
-            ),
-            (
-                1000,
-                0x0,
-                0x989765d0ea7a5ecd,
-                0xf534f51e82a81d29989765d0ea7a5ecd,
-            ),
-            (
-                1000,
-                0x9e3779b97f4a7c15,
-                0x75b5719d9f31a6a2,
-                0x4022020c7b531e8075b5719d9f31a6a2,
-            ),
-            (
-                1024,
-                0x0,
-                0x23bc880ebf0d29c6,
-                0x4c17271c906df79223bc880ebf0d29c6,
-            ),
-            (
-                1024,
-                0x9e3779b97f4a7c15,
-                0x7e249adc60e1f9b4,
-                0x927c8d2b50d33f537e249adc60e1f9b4,
-            ),
-            (
-                4103,
-                0x0,
-                0xad0017645a159db5,
-                0xcfcfb4f1ff0083d9ad0017645a159db5,
-            ),
-            (
-                4103,
-                0x9e3779b97f4a7c15,
-                0x35133e0318e9f178,
-                0xb3813683cf0b01b435133e0318e9f178,
-            ),
-        ];
-        for (len, seed, expected64, expected128) in EXPECTED {
-            let data: Vec<u8> = (0..len).map(|i| (i * 31 + 7).to_le_bytes()[0]).collect();
-            assert_eq!(hash64_with_seed(&data, seed), expected64, "{len} {seed:#x}");
-            assert_eq!(
-                hash128_with_seed(&data, seed),
-                expected128,
-                "{len} {seed:#x}"
-            );
-        }
-    }
-}
+mod test;
