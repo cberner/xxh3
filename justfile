@@ -41,17 +41,20 @@ fuzz_ci: pre
 fuzz_coverage: pre
     #!/usr/bin/env bash
     set -euxo pipefail
+    rustup component add llvm-tools-preview
     RUST_SYSROOT=`cargo rustc -- --print sysroot 2>/dev/null`
     LLVM_COV=`find $RUST_SYSROOT -name llvm-cov`
-    echo $(LLVM_COV)
-    rustup component add llvm-tools-preview
-    cargo fuzz coverage --sanitzer=none fuzz_xxh3
-    $(LLVM_COV) show fuzz/target/*/release/fuzz_xxh3 \
+    echo $LLVM_COV
+    cargo fuzz coverage --sanitizer=none fuzz_xxh3
+    # cargo fuzz coverage builds a separate, instrumented binary in ./target, not ./fuzz/target
+    TARGET=`rustc -vV | sed -n 's/^host: //p'`
+    COVERAGE_BINARY=target/$TARGET/coverage/$TARGET/release/fuzz_xxh3
+    $LLVM_COV show $COVERAGE_BINARY \
                     --format html \
                     -instr-profile=fuzz/coverage/fuzz_xxh3/coverage.profdata \
                     -ignore-filename-regex='.*(cargo/registry|xxh3/fuzz|rustc).*' \
                     > fuzz/coverage/coverage_report.html
-    $(LLVM_COV) report fuzz/target/*/release/fuzz_xxh3 \
+    $LLVM_COV report $COVERAGE_BINARY \
                     -instr-profile=fuzz/coverage/fuzz_xxh3/coverage.profdata \
                     -ignore-filename-regex='.*(cargo/registry|xxh3/fuzz|rustc).*'
     firefox ./fuzz/coverage/coverage_report.html
