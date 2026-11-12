@@ -32,6 +32,17 @@ install_py: pre py_venv
 test: pre
     RUST_BACKTRACE=1 cargo test
 
+# Keep the toolchain and targets in sync with the miri job in .github/workflows/ci.yml
+miri_toolchain := "nightly-2026-11-11"
+
+# Run the tests under Miri, on each target with its own code path
+miri: pre
+    rustup toolchain install {{miri_toolchain}} --profile minimal --component miri,rust-src
+    RUSTFLAGS="-Ctarget-feature=+avx2,+avx512f" cargo +{{miri_toolchain}} miri test -p xxh3 --lib --target x86_64-unknown-linux-gnu
+    RUSTFLAGS="-Ctarget-feature=+avx2,+avx512f" cargo +{{miri_toolchain}} miri test -p xxh3 --lib --target i686-unknown-linux-gnu
+    cargo +{{miri_toolchain}} miri test -p xxh3 --lib --target aarch64-unknown-linux-gnu
+    cargo +{{miri_toolchain}} miri test -p xxh3 --lib --target aarch64_be-unknown-linux-gnu
+
 fuzz: pre
     cargo fuzz run --sanitizer=none fuzz_xxh3 -- -max_len=1000000
 
