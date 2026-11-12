@@ -2,7 +2,7 @@
 name = "xxh3"
 requires-python = ">=3.7"
 dynamic = ["version"]
-classifier = ["Development Status :: 4 - Beta",
+classifiers = ["Development Status :: 4 - Beta",
     "License :: OSI Approved :: MIT License",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python",
