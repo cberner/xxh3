@@ -84,3 +84,32 @@ jobs:
           pip3 install --upgrade pip
           pip3 install maturin
           just test_py
+
+  # Miri checks the unsafe code for undefined behavior. It emulates each target, so one runner also
+  # covers the 32-bit, big-endian and NEON code. Enabling AVX2 & AVX-512 at compile time makes
+  # the x86 targets test those implementations, whatever the runner's CPU supports.
+  # Keep the toolchain and targets in sync with the miri recipe in the justfile
+  miri:
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            rustflags: -Ctarget-feature=+avx2,+avx512f
+          - target: i686-unknown-linux-gnu
+            rustflags: -Ctarget-feature=+avx2,+avx512f
+          - target: aarch64-unknown-linux-gnu
+          - target: aarch64_be-unknown-linux-gnu
+
+    runs-on: ubuntu-latest
+
+    env:
+      RUSTFLAGS: --deny warnings ${{ matrix.rustflags }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Miri
+        run: rustup toolchain install nightly-2026-11-11 --profile minimal --component miri,rust-src
+
+      - name: Run tests under Miri
+        run: cargo +nightly-2026-11-11 miri test -p xxh3 --lib --target ${{ matrix.target }}

@@ -1,8 +1,10 @@
-// known_answers checks against hashes from the C reference implementation. The other tests call
-// the reference itself
+// The known-answer tests run everywhere, including under Miri. The other tests compare against
+// the C reference implementation, except under Miri, which can't call C. There the generic
+// implementation stands in for it, and known_answers checks that one against the reference
 
 use super::*;
 
+#[cfg(not(miri))]
 const SEEDS: &[u64] = &[
     0,
     1,
@@ -12,6 +14,9 @@ const SEEDS: &[u64] = &[
     0x8000_0000_0000_0000,
     u64::MAX,
 ];
+// Miri is slow, so it gets fewer
+#[cfg(miri)]
+const SEEDS: &[u64] = &[0, 0x9e37_79b9_7f4a_7c15, u64::MAX];
 
 // (input length, seed, 64-bit hash, 128-bit hash) of test_data(input length), from the C
 // reference implementation. The lengths are on both sides of every boundary between the code
@@ -201,17 +206,33 @@ fn large_input_implementations() -> Vec<Implementation> {
 
 // Input lengths over 240 bytes
 fn large_lengths() -> Vec<usize> {
-    // Every length up to 3 blocks and 2 stripes, and a few far longer
-    let block_len = STRIPE_LENGTH * (DEFAULT_SECRET.len() - STRIPE_LENGTH) / SECRET_CONSUME_RATE;
-    let mut lengths: Vec<usize> = (241..=3 * block_len + 2 * STRIPE_LENGTH).collect();
-    lengths.extend([65_535, 65_536, 65_537, 1 << 20, (1 << 20) + 1]);
-    lengths
+    if cfg!(miri) {
+        // Up to 3 blocks, ending: just past a block boundary, on one, in the stripe after one,
+        // and in a later stripe
+        vec![241, 1024, 1025, 1089, 2048, 3137]
+    } else {
+        // Every length up to 3 blocks and 2 stripes, and a few far longer
+        let block_len =
+            STRIPE_LENGTH * (DEFAULT_SECRET.len() - STRIPE_LENGTH) / SECRET_CONSUME_RATE;
+        let mut lengths: Vec<usize> = (241..=3 * block_len + 2 * STRIPE_LENGTH).collect();
+        lengths.extend([65_535, 65_536, 65_537, 1 << 20, (1 << 20) + 1]);
+        lengths
+    }
 }
 
+#[cfg(not(miri))]
 fn expected_large(data: &[u8], seed: u64) -> (u64, u128) {
     (
         xxhash_reference::xxh3_64(data, seed),
         xxhash_reference::xxh3_128(data, seed),
+    )
+}
+
+#[cfg(miri)]
+fn expected_large(data: &[u8], seed: u64) -> (u64, u128) {
+    (
+        hash64_large_generic(data, seed),
+        hash128_large_generic(data, seed),
     )
 }
 
@@ -267,6 +288,7 @@ fn known_answers() {
     }
 }
 
+#[cfg(not(miri))]
 #[test]
 fn short_inputs() {
     let buffer = test_data(240);
@@ -304,7 +326,11 @@ fn large_inputs() {
 fn unaligned_large_inputs() {
     let implementations = large_input_implementations();
     let lengths = [241, 1089];
-    let offsets: Vec<usize> = (1..STRIPE_LENGTH).collect();
+    let offsets: Vec<usize> = if cfg!(miri) {
+        vec![1, 7, 31, 63]
+    } else {
+        (1..STRIPE_LENGTH).collect()
+    };
     let buffer = test_data(lengths.iter().max().unwrap() + STRIPE_LENGTH);
     for len in lengths {
         for &offset in &offsets {
