@@ -32,6 +32,16 @@ install_py: pre py_venv
 test: pre
     RUST_BACKTRACE=1 cargo test
 
+# Check that the crate builds for targets without std: one without SIMD implementations, one with
+# NEON and one with AVX2 & AVX-512. Then run the tests without the std feature, so that the public
+# functions use only the SIMD instructions the target enables at compile time
+no_std: pre
+    rustup target add thumbv7em-none-eabihf aarch64-unknown-none x86_64-unknown-none
+    cargo clippy -p xxh3 --no-default-features --target thumbv7em-none-eabihf
+    cargo clippy -p xxh3 --no-default-features --target aarch64-unknown-none
+    cargo clippy -p xxh3 --no-default-features --target x86_64-unknown-none
+    RUST_BACKTRACE=1 cargo test -p xxh3 --no-default-features
+
 # Keep the toolchain and targets in sync with the miri job in .github/workflows/ci.yml
 miri_toolchain := "nightly-2026-11-11"
 

@@ -1,3 +1,5 @@
+// Only detecting CPU features at runtime needs std. The tests always have it
+#![cfg_attr(not(any(feature = "std", test)), no_std)]
 #![deny(clippy::all, clippy::pedantic, clippy::disallowed_methods)]
 #![deny(clippy::cast_possible_truncation)]
 #![deny(clippy::cast_possible_wrap)]
