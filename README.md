@@ -8,7 +8,7 @@ Rust implementation of the XXH3 hash function.
 
 ## FAQ
 1. How is this crate different than `twox-hash` or `xxhash-rust`?
-   This crate has fewer hash algorithms (only XXH3 64bit and 128bit), but supports runtime detection of AVX2 & NEON
+   This crate has fewer hash algorithms (only XXH3 64bit and 128bit), but supports runtime detection of AVX2, AVX-512 & NEON
    instructions and therefore may be faster. I designed it for use in [redb](https://github.com/cberner/redb).
 
 ## License
