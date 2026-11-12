@@ -23,6 +23,12 @@ homepage = "https://github.com/cberner/xxh3"
 repository = "https://github.com/cberner/xxh3"
 authors = ["Christopher Berner <me@cberner.com>"]
 
+[features]
+default = ["std"]
+# Detects at runtime which SIMD instructions the CPU supports. Without it, the crate is no_std, and
+# uses only the SIMD instructions the target enables at compile time
+std = []
+
 [dev-dependencies]
 criterion = { version = "0.7.0", features=["html_reports"] }
 rand = "0.9"

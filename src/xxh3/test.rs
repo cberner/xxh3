@@ -3,6 +3,10 @@
 // implementation stands in for it, and known_answers checks that one against the reference
 
 use super::*;
+// The tests detect CPU features at runtime with or without the std feature, so that they test
+// every implementation the CPU can run
+#[cfg(all(target_arch = "aarch64", target_endian = "little"))]
+use std::arch::is_aarch64_feature_detected;
 
 #[cfg(not(miri))]
 const SEEDS: &[u64] = &[

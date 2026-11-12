@@ -28,18 +28,46 @@
 //
 // Everything else, including all slicing of the input and secret, is safe code
 
-use std::mem::size_of;
+use core::mem::size_of;
 
 // The NEON code loads bytes into its 64-bit lanes in the target's byte order, which is the
 // little-endian order xxh3 is defined in only on a little-endian target
 #[cfg(all(target_arch = "aarch64", target_endian = "little"))]
-use std::arch::aarch64::*;
-#[cfg(all(target_arch = "aarch64", target_endian = "little"))]
-use std::arch::is_aarch64_feature_detected;
+use core::arch::aarch64::*;
 #[cfg(target_arch = "x86")]
-use std::arch::x86::*;
+use core::arch::x86::*;
 #[cfg(target_arch = "x86_64")]
-use std::arch::x86_64::*;
+use core::arch::x86_64::*;
+
+// Whether the CPU supports a target feature. Detecting that at runtime needs std, so without it,
+// only the features the target enables at compile time are used
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+macro_rules! x86_feature_detected {
+    ($feature:tt) => {{
+        #[cfg(feature = "std")]
+        {
+            std::arch::is_x86_feature_detected!($feature)
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            cfg!(target_feature = $feature)
+        }
+    }};
+}
+
+#[cfg(all(target_arch = "aarch64", target_endian = "little"))]
+macro_rules! aarch64_feature_detected {
+    ($feature:tt) => {{
+        #[cfg(feature = "std")]
+        {
+            std::arch::is_aarch64_feature_detected!($feature)
+        }
+        #[cfg(not(feature = "std"))]
+        {
+            cfg!(target_feature = $feature)
+        }
+    }};
+}
 
 const STRIPE_LENGTH: usize = 64;
 const SECRET_CONSUME_RATE: usize = 8;
@@ -160,18 +188,18 @@ pub fn hash64_with_seed(data: &[u8], seed: u64) -> u64 {
     } else {
         #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
         {
-            if is_x86_feature_detected!("avx512f") {
+            if x86_feature_detected!("avx512f") {
                 // SAFETY: the CPU supports AVX-512F, the only feature hash64_large_avx512 enables
                 return unsafe { hash64_large_avx512(data, seed) };
             }
-            if is_x86_feature_detected!("avx2") {
+            if x86_feature_detected!("avx2") {
                 // SAFETY: the CPU supports AVX2, the only feature hash64_large_avx2 enables
                 return unsafe { hash64_large_avx2(data, seed) };
             }
         }
         #[cfg(all(target_arch = "aarch64", target_endian = "little"))]
         {
-            if is_aarch64_feature_detected!("neon") {
+            if aarch64_feature_detected!("neon") {
                 // SAFETY: the CPU supports NEON, the only feature hash64_large_neon enables
                 return unsafe { hash64_large_neon(data, seed) };
             }
@@ -187,18 +215,18 @@ pub fn hash128_with_seed(data: &[u8], seed: u64) -> u128 {
     } else {
         #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
         {
-            if is_x86_feature_detected!("avx512f") {
+            if x86_feature_detected!("avx512f") {
                 // SAFETY: the CPU supports AVX-512F, the only feature hash128_large_avx512 enables
                 return unsafe { hash128_large_avx512(data, seed) };
             }
-            if is_x86_feature_detected!("avx2") {
+            if x86_feature_detected!("avx2") {
                 // SAFETY: the CPU supports AVX2, the only feature hash128_large_avx2 enables
                 return unsafe { hash128_large_avx2(data, seed) };
             }
         }
         #[cfg(all(target_arch = "aarch64", target_endian = "little"))]
         {
-            if is_aarch64_feature_detected!("neon") {
+            if aarch64_feature_detected!("neon") {
                 // SAFETY: the CPU supports NEON, the only feature hash128_large_neon enables
                 return unsafe { hash128_large_neon(data, seed) };
             }

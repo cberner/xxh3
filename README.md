@@ -10,6 +10,9 @@ Rust implementation of the XXH3 hash function.
 1. How is this crate different than `twox-hash` or `xxhash-rust`?
    This crate has fewer hash algorithms (only XXH3 64bit and 128bit), but supports runtime detection of AVX2, AVX-512 & NEON
    instructions and therefore may be faster. I designed it for use in [redb](https://github.com/cberner/redb).
+2. Does it support `no_std`?
+   Yes, with the default `std` feature turned off. Without std it can't detect CPU features at runtime, so it uses AVX2,
+   AVX-512 & NEON only when the target enables them at compile time, for example with `-C target-feature=+avx2`.
 
 ## License
 
