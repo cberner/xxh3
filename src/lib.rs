@@ -6,6 +6,9 @@
 #![deny(clippy::cast_lossless)]
 #![deny(clippy::semicolon_if_nothing_returned)]
 #![deny(clippy::ptr_as_ptr)]
+// Every unsafe block must justify itself, and cover only one unsafe operation
+#![deny(clippy::undocumented_unsafe_blocks)]
+#![deny(clippy::multiple_unsafe_ops_per_block)]
 // We use intrinsics without alignment requirements, so these casts are all just fine
 #![allow(clippy::cast_ptr_alignment)]
 #![allow(clippy::wildcard_imports)]
