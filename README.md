@@ -6,6 +6,19 @@
 # xxh3
 Rust implementation of the XXH3 hash function.
 
+## Python
+The `xxh3` package on PyPI provides Python bindings:
+
+```python
+import xxh3
+
+xxh3.xxh3_64(b"hello world")             # 64-bit hash, as an int
+xxh3.xxh3_128(b"hello world", seed=1234) # 128-bit hash, as an int
+```
+
+Both functions accept `bytes` or `bytearray`, and an optional 64-bit `seed` (default 0). Inputs of
+64 KiB or more are hashed with the GIL released.
+
 ## FAQ
 1. How is this crate different than `twox-hash` or `xxhash-rust`?
    This crate has fewer hash algorithms (only XXH3 64bit and 128bit), but supports runtime detection of AVX2, AVX-512 & NEON
