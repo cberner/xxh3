@@ -1,5 +1,6 @@
 [project]
 name = "xxh3"
+description = "XXH3 hash function"
 requires-python = ">=3.7"
 dynamic = ["version"]
 classifiers = ["Development Status :: 4 - Beta",

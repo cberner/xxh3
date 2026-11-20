@@ -15,10 +15,6 @@ flamegraph:
     cargo flamegraph --bench benchmark_128 -- --bench
     firefox ./flamegraph.svg
 
-publish_py: test_py
-    docker pull quay.io/pypa/manylinux2014_x86_64
-    docker run -it --rm -v `pwd`:/xxh3-ro:ro quay.io/pypa/manylinux2014_x86_64 /xxh3-ro/crates/xxh3-python/py_publish.sh
-
 py_venv:
     [ -d venv ] || python3 -m venv venv
     . ./venv/bin/activate && pip install -U maturin
