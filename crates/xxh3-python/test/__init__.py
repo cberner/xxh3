@@ -74,7 +74,7 @@ class Xxh3TestCase(TestCase):
         self.assertEqual(results, [0x687E4DC68AF3C6F5] * 4)
 
     def test_rejects_other_types(self):
-        for value in ["xxh3", memoryview(b"xxh3"), None, 1]:
+        for value in ["xxh3", memoryview(b"xxh3"), [1, 2, 3], None, 1]:
             with self.subTest(value=value):
                 with self.assertRaises(TypeError):
                     xxh3.xxh3_64(value)
