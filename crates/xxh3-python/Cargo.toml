@@ -2,7 +2,7 @@
 name = "xxh3-python"
 description = "Python bindings for xxh3"
 publish = false
-version = "0.1.1"
+version = "0.2.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
