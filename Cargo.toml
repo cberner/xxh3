@@ -2,7 +2,7 @@
 name = "xxh3"
 description = "XXH3 hash function"
 readme = "README.md"
-version = "0.1.1"
+version = "0.2.0"
 exclude = ["fuzz/", "xxhash_reference/"]
 edition.workspace = true
 rust-version.workspace = true
